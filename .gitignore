@@ -1,3 +1,8 @@
+ngu_sediment/*
+*.gpkg
+DEM25Norge_west_norway.tif
+*.geojson
+*.tif
 .Rproj.user
 .Rhistory
 .RData
