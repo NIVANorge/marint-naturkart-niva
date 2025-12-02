@@ -3,10 +3,10 @@ Code for marine nature mapping project 2025-2026
 
 ##
 
-For running the python notebooks install dependencies using
+For running the python [notebooks](./notebooks/) install dependencies using
 
 ```bash
-pip install -r requirements.txt'
+pip install -r requirements.txt
 ```
 
-If on the NIVA jupytherhub the above step shouldn't be needed.
+If you use NIVA jupytherhub the above step isn't needed.
