@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<GetCoverage version="2.0.1" service="WCS" 
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+            xmlns="http://www.opengis.net/wcs/2.0" 
+            xmlns:ows="http://www.opengis.net/ows/1.1" 
+            xmlns:gml="http://www.opengis.net/gml" 
+            xmlns:ogc="http://www.opengis.net/ogc" 
+            xsi:schemaLocation="http://www.opengis.net/wcs/2.0 https://schemas.opengis.net/wcs/2.0/wcsAll.xsd">
+  <CoverageId>no.niva.nkm:nkm-dem</CoverageId>
+  <DimensionTrim>
+    <Dimension>E</Dimension>
+    <TrimLow>{{minx}}</TrimLow>
+    <TrimHigh>{{maxx}}</TrimHigh>
+  </DimensionTrim>
+  <DimensionTrim>
+    <Dimension>N</Dimension>
+    <TrimLow>{{miny}}</TrimLow>
+    <TrimHigh>{{maxy}}</TrimHigh>
+  </DimensionTrim>
+  <format>geotiff</format>
+</GetCoverage>

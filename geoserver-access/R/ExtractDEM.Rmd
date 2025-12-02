@@ -1,0 +1,56 @@
+---
+title: "Niva Geoserver WCS Example"
+output: html_document
+---
+
+How to get DEM from NIVAs Geoserver.
+
+Some precautions: 
+- Coordinates should be in UTM33 (EPSG:32633).
+- You need to have an account at NIVAs GeoServer to access the data.
+
+
+```{r}   
+library(httr)
+library(getPass)
+
+call_wcs <- function(bbox, outputFile) {
+  body <- readLines("../requests/wcs_getcoverage.xml")
+  body <- gsub("{{minx}}", bbox$minx, body, fixed = TRUE)
+  body <- gsub("{{miny}}", bbox$miny, body, fixed = TRUE)
+  body <- gsub("{{maxx}}", bbox$maxx, body, fixed = TRUE)
+  body <- gsub("{{maxy}}", bbox$maxy, body, fixed = TRUE)
+  
+  username <- getPass("Username: ")
+  
+  response <- POST(
+    url = "https://geoserver.p.niva.no/wcs",
+    body = paste(body, collapse = "\n"),
+    authenticate(username, getPass("Password: "), type = "basic"),
+    content_type("text/xml"),
+    encode = "raw"
+  )
+  
+  content_type <- http_type(response)
+  if (grepl("xml", content_type)) {
+    print(content(response, "text"))
+  } else {
+    writeBin(content(response, "raw"), outputFile) 
+  }
+}
+
+bbox <- list(minx=27580, maxx=59194, miny=6957986, maxy=6973240)
+call_wcs(bbox, "output_dem.tif")
+
+```
+
+Display result using package terra:
+
+
+```{r}
+library(terra)
+
+dem <- rast("output_dem.tif")
+plot(dem)
+```
+
