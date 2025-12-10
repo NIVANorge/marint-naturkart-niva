@@ -7,3 +7,4 @@ ngu_sediment/*
 .Rhistory
 .RData
 .Ruserdata
+**/__pycache__/**
