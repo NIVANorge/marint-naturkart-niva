@@ -1,7 +1,7 @@
 # marint-naturkart-niva~~R~~
 Code for marine nature mapping project 2025-2026
 
-##
+## Getting started
 
 For running the python [notebooks](./notebooks/) install dependencies using
 
@@ -9,4 +9,8 @@ For running the python [notebooks](./notebooks/) install dependencies using
 pip install -r requirements.txt
 ```
 
-If you use NIVA jupytherhub the above step isn't needed.
+## Repo history
+
+Important points in time
+
+* Report delivery [r2025](https://github.com/NIVANorge/marint-naturkart-niva/tree/r2025)
