@@ -1,4 +1,5 @@
 ngu_sediment/*
+mdir/*
 *.gpkg
 *.geojson
 *.tif
