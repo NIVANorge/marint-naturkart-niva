@@ -21,24 +21,38 @@ MARINE_VANN_TYPE_DESC = {
     "09": "Særegen vannforekomst",
 }
 
+VANNTYPER_COMBINED = {
+    "beskyttet": ["01", "01a", "02", "02a"],
+    "sterkt_ferskvannspåvirket": ["03", "03a"],
+    "moderat_eksponert": ["04", "05"],
+    "bølgeeksponert": ["06", "07"],
+    "strømrike": ["08"],
+    "særegen": ["09"],
+}
 
-def one_hot_encode_marine_types(marine_type_raster, id_type_map):
-    one_hot = np.zeros(
-        (len(MARINE_VANN_TYPE_DESC), *marine_type_raster.shape), dtype=np.float32
-    )
-    for i, t in id_type_map.items():
-        one_hot[i] = marine_type_raster == t
-    return one_hot
+def one_hot_encode_marine_types(marine_type_raster, id_type_map, combine_types=False):
+    num_classes = len(MARINE_VANN_TYPE_DESC) if not combine_types else len(VANNTYPER_COMBINED)
+
+    one_hot_types = np.zeros(marine_type_raster.shape + (num_classes,), dtype=np.uint8)
+
+    valid_ids = marine_type_raster >= 0  # exclude nodata (-1)
+    for class_id in range(num_classes):
+        mask = valid_ids & (marine_type_raster == class_id)
+        one_hot_types[..., class_id][mask] = 1
+
+    return one_hot_types
 
 
-def rasterize_marine_types(mv_proj, dem):
-    types = MARINE_VANN_TYPE_DESC.keys()
+def rasterize_marine_types(mv_proj, dem, combine_types=False):
+    types = MARINE_VANN_TYPE_DESC.keys() if not combine_types else VANNTYPER_COMBINED.keys()
     type_id_map = {t: i for i, t in enumerate(types)}
     id_type_map = {i: t for t, i in type_id_map.items()}
 
     # Prepare shapes as (geometry, value)
+    mv_proj = mv_proj.copy()
+    mv_proj["type_key"] = mv_proj["Type"] if not combine_types else mv_proj["Type"].map(lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x))
     shapes = [
-        (geom, type_id_map[t]) for geom, t in zip(mv_proj.geometry, mv_proj["Type"])
+        (geom, type_id_map[t]) for geom, t in zip(mv_proj.geometry, mv_proj["type_key"])
     ]
 
     out_shape = dem.data.shape[-2:]
@@ -60,7 +74,7 @@ def plot_one_hot_vanntyper(one_hot_types, id_type_map, transform, crs):
 
     types = sorted(id_type_map.items())  # list of (class_id, type_code)
     n = len(types)
-    cols = 4
+    cols = 4 
     rows = 3
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
 
@@ -85,8 +99,11 @@ def plot_one_hot_vanntyper(one_hot_types, id_type_map, transform, crs):
 def plot_vanntyper(marine_type_raster, transform, id_type_map):
     masked = np.ma.masked_less(marine_type_raster, 0)
 
+    description = MARINE_VANN_TYPE_DESC if "01" in id_type_map else {
+        k: " ".join(VANNTYPER_COMBINED[k]) for k in id_type_map.values()
+    }
     # Discrete colormap and norm
-    num_classes = len(MARINE_VANN_TYPE_DESC)
+    num_classes = len(id_type_map)
     cmap = plt.cm.get_cmap("tab20", num_classes)
     cmap.set_bad(color="lightgrey", alpha=0.3)
     norm = BoundaryNorm(np.arange(-0.5, num_classes + 0.5, 1), ncolors=cmap.N)
@@ -98,7 +115,7 @@ def plot_vanntyper(marine_type_raster, transform, id_type_map):
 
     tick_locs = np.arange(num_classes)
     tick_labels = [
-        f"{i}: {id_type_map[i]} – {MARINE_VANN_TYPE_DESC[id_type_map[i]]}"
+        f"{i}: {id_type_map[i]} – {description[id_type_map[i]]}"
         for i in tick_locs
     ]
     cbar = fig.colorbar(im, ax=ax, ticks=tick_locs, fraction=0.046, pad=0.04)
