@@ -1,0 +1,20 @@
+[project]
+name = "marint-naturkart-niva"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Kim Leirvik",email = "kim.leirvik@niva.no"}
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "geopandas>=1.1.2",
+    "ipykernel>=7.1.0",
+    "matplotlib>=3.10.8",
+    "rasterio>=1.4.4",
+    "scikit-learn>=1.8.0",
+    "shapely>=2.1.2",
+    "xdem>=0.2.2",
+]
+
+
