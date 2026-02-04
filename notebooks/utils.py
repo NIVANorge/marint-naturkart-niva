@@ -5,6 +5,7 @@ from matplotlib.colors import BoundaryNorm
 import matplotlib.pyplot as plt
 import rasterio as rio
 import geoutils as gu
+import rasterio.plot
 
 MARINE_VANN_TYPE_DESC = {
     "01": "Beskyttet fjord/kyst",
