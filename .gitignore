@@ -9,3 +9,4 @@ mdir/*
 .RData
 .Ruserdata
 **/__pycache__/**
+.env
