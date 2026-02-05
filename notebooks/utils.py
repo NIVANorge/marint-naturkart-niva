@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import BoundaryNorm
@@ -6,6 +7,8 @@ import matplotlib.pyplot as plt
 import rasterio as rio
 import geoutils as gu
 import rasterio.plot
+from sqlalchemy import create_engine
+
 
 MARINE_VANN_TYPE_DESC = {
     "01": "Beskyttet fjord/kyst",
@@ -129,3 +132,13 @@ def plot_vanntyper(marine_type_raster, transform, id_type_map):
 def to_filename(ressurstittel, romligutstrekning, ressursdato, referansesystem):
 
     return f"{ressurstittel}_{romligutstrekning}_{ressursdato}_{referansesystem}"
+
+
+def to_postgis(gdf, fname):
+    if os.environ.get("NIVAGIS_CONNECTION_STR"):
+        table_name = "_".join(fname.split("_")[:-1])[:50]
+        conn = create_engine(os.environ["NIVAGIS_CONNECTION_STR"])
+        gdf.to_postgis(table_name, schema="naturkartmarin", con=conn, if_exists="replace")
+        print(f"Table {table_name} uploaded to PostGIS.")
+    else:
+        print("NIVAGIS_CONNECTION_STR not set. Skipping PostGIS upload.")
