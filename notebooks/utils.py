@@ -26,12 +26,12 @@ MARINE_VANN_TYPE_DESC = {
 }
 
 VANNTYPER_COMBINED = {
-    "beskyttet": ["01", "01a", "02", "02a"],
-    "sterkt_ferskvannspåvirket": ["03", "03a"],
-    "moderat_eksponert": ["04", "05"],
+    "beskyttet": ["01", "01a", "02", "02a", "03", "03a", "09"],
+    #"sterkt_ferskvannspåvirket": [, ], moved to beskyttet
+    "moderat_eksponert": ["04", "05", "08"],
     "bølgeeksponert": ["06", "07"],
-    "strømrike": ["08"],
-    "særegen": ["09"],
+    #"strømrike": ["08"], moved to moderat_eksponert
+    #"særegen": ["09"], moved to beskyttet
 }
 
 def one_hot_encode_marine_types(marine_type_raster, id_type_map, combine_types=False):
@@ -73,13 +73,11 @@ def rasterize_marine_types(mv_proj, dem, combine_types=False):
     return marine_type_raster, id_type_map
 
 
-def plot_one_hot_vanntyper(one_hot_types, id_type_map, transform, crs):
+def plot_one_hot_vanntyper(one_hot_types, id_type_map, transform, crs, cols, rows):
     # Create a grid of subplots for each marine type
 
     types = sorted(id_type_map.items())  # list of (class_id, type_code)
     n = len(types)
-    cols = 4 
-    rows = 3
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
 
     for i, (cid, tcode) in enumerate(types):
