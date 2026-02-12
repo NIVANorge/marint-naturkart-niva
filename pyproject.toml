@@ -2,11 +2,12 @@
 name = "marint-naturkart-niva"
 version = "0.1.0"
 description = ""
+package-mode = false
 authors = [
     {name = "Kim Leirvik",email = "kim.leirvik@niva.no"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.15"
 dependencies = [
     "geoalchemy2>=0.18.1",
     "geopandas>=1.1.2",
