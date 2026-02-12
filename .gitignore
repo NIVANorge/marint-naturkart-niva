@@ -4,6 +4,7 @@ mdir/*
 *.geojson
 *.tif
 *.tiff
+*.parquet
 .Rproj.user
 .Rhistory
 .RData

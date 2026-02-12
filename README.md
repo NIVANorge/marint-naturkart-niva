@@ -8,6 +8,8 @@ For running the python [notebooks](./notebooks/) install dependencies using
 ```bash
 uv sync
 # or
+poetry install
+# or
 pip install -r requirements.txt 
 # or if on NIVAs jupyterhub you only need to run
 pip install xdem
