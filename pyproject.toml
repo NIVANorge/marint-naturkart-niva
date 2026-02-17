@@ -17,7 +17,7 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "pyarrow>=23.0.0",
     "rasterio>=1.4.4",
-    "scikit-learn>=1.8.0",
+    "scikit-learn==1.7.1",
     "shapely>=2.1.2",
     "sqlalchemy>=2.0.46",
     "xdem>=0.2.2",
