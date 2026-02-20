@@ -1,2 +1,1 @@
 requests==2.31.0
-getpass==0.1.2
