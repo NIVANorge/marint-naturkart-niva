@@ -1,5 +1,7 @@
 import requests
 import getpass
+import common
+
 
 def call_wcs_service(body, output_file="output.tiff"):
     url = "https://geoserver.p.niva.no/wcs"
@@ -20,12 +22,7 @@ def call_wcs_service(body, output_file="output.tiff"):
         print(response.text)
         return None
 
-def open_xml_request_template(req_file):
-    with open(req_file, 'r') as file:
-        return file.read()
-    
-req_file = "../requests/wcs_getcoverage.xml"
-xml_body = open_xml_request_template(req_file)
+xml_body = common.open_xml_request_template("wcs_getcoverage.xml")
 minx = -340648
 maxx = 1077651
 miny = 6227234
