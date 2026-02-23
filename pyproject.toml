@@ -1,8 +1,8 @@
+
 [project]
-name = "marint-naturkart-niva"
+name = "subkart"
 version = "0.1.0"
 description = ""
-package-mode = false
 authors = [
     {name = "Kim Leirvik",email = "kim.leirvik@niva.no"}
 ]
@@ -11,7 +11,6 @@ requires-python = ">=3.11,<3.15"
 dependencies = [
     "geoalchemy2>=0.18.1",
     "geopandas>=1.1.2",
-    "ipykernel>=7.1.0",
     "lxml>=6.0.2",
     "matplotlib>=3.10.8",
     "psycopg2-binary>=2.9.11",
@@ -23,4 +22,31 @@ dependencies = [
     "xdem>=0.2.2",
 ]
 
+[dependency-groups]
+dev  = [
+    "isort",
+    "black",
+    "ipykernel",
+]
 
+
+[build-system]
+requires = ["setuptools>=61", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["subkart"]
+
+[tool.black]
+line-length = 120
+target_version = ['py310']
+include = '\.py$'
+
+[tool.isort]
+line_length=120                # corresponds to -w  flag
+multi_line_output=3            # corresponds to -m  flag
+include_trailing_comma=true    # corresponds to -tc flag
+skip_glob = '^((?!py$).)*$'    # this makes sort all Python files
