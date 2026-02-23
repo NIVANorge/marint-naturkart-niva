@@ -11,3 +11,4 @@ mdir/*
 .Ruserdata
 **/__pycache__/**
 .env
+**egg-info/**
