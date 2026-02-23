@@ -31,14 +31,8 @@ dev  = [
 
 
 [build-system]
-requires = ["setuptools>=61", "setuptools_scm"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools]
-include-package-data = true
-
-[tool.setuptools.packages.find]
-include = ["subkart"]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 120
