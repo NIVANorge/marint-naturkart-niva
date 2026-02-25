@@ -10,11 +10,11 @@ import rasterio.plot
 from sqlalchemy import create_engine
 
 
-from subkart.features import MARINE_VANN_TYPE_DESC, VANNTYPER_COMBINED
+from subkart.features import MARINE_VANN_TYPE_DESC, VANNTYPER_COMBINED, marine_type_map
 
-def plot_one_hot_vanntyper(one_hot_types, id_type_map, transform, crs, cols, rows):
-    # Create a grid of subplots for each marine type
+def plot_one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
 
+    _, id_type_map, _ = marine_type_map()
     types = sorted(id_type_map.items())  # list of (class_id, type_code)
     n = len(types)
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
@@ -30,22 +30,21 @@ def plot_one_hot_vanntyper(one_hot_types, id_type_map, transform, crs, cols, row
         r.plot(ax=ax)
         ax.set_title(f"{tcode} (id {cid})")
 
-    # Hide any extra axes
     for j in range(i + 1, rows * cols):
         axes.flat[j].axis("off")
 
     plt.tight_layout()
 
 
-def plot_vanntyper(marine_type_raster, transform, id_type_map):
+def plot_vanntyper(marine_type_raster, transform):
+    
     masked = np.ma.masked_less(marine_type_raster, 0)
-
+    _, id_type_map, _ = marine_type_map()
     description = (
         MARINE_VANN_TYPE_DESC
         if "01" in id_type_map
         else {k: " ".join(VANNTYPER_COMBINED[k]) for k in id_type_map.values()}
     )
-    # Discrete colormap and norm
     num_classes = len(id_type_map)
     cmap = plt.cm.get_cmap("tab20", num_classes)
     cmap.set_bad(color="lightgrey", alpha=0.3)
