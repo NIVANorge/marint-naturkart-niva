@@ -1,6 +1,11 @@
+import enum
+from pyexpat import features
+from attr import attributes
 import rasterio as rio
 import numpy as np
-
+import xdem
+import geopandas as gpd
+import subkart
 
 MARINE_VANN_TYPE_DESC = {
     "01": "Beskyttet fjord/kyst",
@@ -17,6 +22,7 @@ MARINE_VANN_TYPE_DESC = {
     "09": "Særegen vannforekomst",
 }
 
+
 VANNTYPER_COMBINED = {
     "beskyttet": ["01", "01a", "02", "02a", "03", "03a", "09"],
     # "sterkt_ferskvannspåvirket": [, ], moved to beskyttet
@@ -26,10 +32,16 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
-def one_hot_encode_marine_types(marine_type_raster, id_type_map, combine_types=False):
-    num_classes = (
-        len(MARINE_VANN_TYPE_DESC) if not combine_types else len(VANNTYPER_COMBINED)
-    )
+
+def marine_type_map():
+    types = VANNTYPER_COMBINED.keys()
+    type_id_map = {t: i for i, t in enumerate(types)}
+    id_type_map = {i: t for t, i in type_id_map.items()}
+    return types, id_type_map, type_id_map
+
+
+def one_hot_encode_marine_types(marine_type_raster):
+    num_classes = len(VANNTYPER_COMBINED)
 
     one_hot_types = np.zeros(marine_type_raster.shape + (num_classes,), dtype=np.uint8)
 
@@ -41,25 +53,13 @@ def one_hot_encode_marine_types(marine_type_raster, id_type_map, combine_types=F
     return one_hot_types
 
 
-def rasterize_marine_types(mv_proj, dem, combine_types=False):
-    types = (
-        MARINE_VANN_TYPE_DESC.keys() if not combine_types else VANNTYPER_COMBINED.keys()
-    )
-    type_id_map = {t: i for i, t in enumerate(types)}
-    id_type_map = {i: t for t, i in type_id_map.items()}
+def rasterize_marine_types(marine_vanntyper, dem):
 
+    _, id_type_map, type_id_map = marine_type_map()
     # Prepare shapes as (geometry, value)
-    mv_proj = mv_proj.copy()
-    mv_proj["type_key"] = (
-        mv_proj["Type"]
-        if not combine_types
-        else mv_proj["Type"].map(
-            lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x)
-        )
-    )
-    shapes = [
-        (geom, type_id_map[t]) for geom, t in zip(mv_proj.geometry, mv_proj["type_key"])
-    ]
+    marine_vanntyper = marine_vanntyper.copy()
+    marine_vanntyper["type_key"] =  marine_vanntyper["Type"].map(lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x))
+    shapes = [(geom, type_id_map[t]) for geom, t in zip(marine_vanntyper.geometry, marine_vanntyper["type_key"])]
 
     out_shape = dem.data.shape[-2:]
     transform = dem.transform
@@ -72,4 +72,26 @@ def rasterize_marine_types(mv_proj, dem, combine_types=False):
         all_touched=True,
     )
 
-    return marine_type_raster, id_type_map
+    return marine_type_raster
+
+
+def build(dem: xdem.DEM, marine_vanntyper: gpd.GeoDataFrame) -> np.ndarray:
+    """
+    Build features from a digital elevation model (DEM) and marine types.
+    """
+    depth = np.ma.filled(dem.data, np.nan).astype(np.float32)
+    slope, aspect, curvature = xdem.terrain.get_terrain_attribute(
+        dem.data,
+        resolution=dem.res,
+        attribute=["slope", "aspect", "curvature"],
+    )
+
+    marine_vanntyper = marine_vanntyper.to_crs(dem.crs)
+    marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, dem)
+    one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
+
+    features = np.concatenate([np.stack([depth, slope, aspect, curvature], axis=-1), one_hot_types], axis=-1)
+
+    valid_attrs = (~np.isnan(depth)) & (~np.isnan(slope)) & (~np.isnan(aspect)) & (~np.isnan(curvature))
+
+    return features.astype("float32"), valid_attrs
