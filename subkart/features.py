@@ -1,10 +1,12 @@
 import enum
 from pyexpat import features
-from attr import attributes
-import rasterio as rio
-import numpy as np
-import xdem
+
 import geopandas as gpd
+import numpy as np
+import rasterio as rio
+import xdem
+from attr import attributes
+
 import subkart
 
 MARINE_VANN_TYPE_DESC = {
@@ -58,7 +60,9 @@ def rasterize_marine_types(marine_vanntyper, dem):
     _, id_type_map, type_id_map = marine_type_map()
     # Prepare shapes as (geometry, value)
     marine_vanntyper = marine_vanntyper.copy()
-    marine_vanntyper["type_key"] =  marine_vanntyper["Type"].map(lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x))
+    marine_vanntyper["type_key"] = marine_vanntyper["Type"].map(
+        lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x)
+    )
     shapes = [(geom, type_id_map[t]) for geom, t in zip(marine_vanntyper.geometry, marine_vanntyper["type_key"])]
 
     out_shape = dem.data.shape[-2:]
