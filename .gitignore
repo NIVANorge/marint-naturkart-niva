@@ -12,3 +12,4 @@ mdir/*
 **/__pycache__/**
 .env
 **egg-info/**
+**/*.joblib
