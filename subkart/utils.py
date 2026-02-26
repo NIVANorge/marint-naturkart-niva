@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import rasterio as rio
 import rasterio.plot
+import geopandas as gpd
+from pathlib import Path
 from matplotlib.colors import BoundaryNorm
 from sqlalchemy import create_engine
 
@@ -61,6 +63,17 @@ def plot_vanntyper(marine_type_raster, transform):
     cbar.ax.set_ylabel("Vanntype", rotation=90)
 
     plt.show()
+
+
+def to_geoparquet(input_gml_path: Path, layer_name: str, output_path: Path):
+    """Save GML Download from NGU as GeoParquet
+
+    Geoparquet is a really nice format for geospatial data optimized for cloud access.
+    
+    """
+    gdf = gpd.read_file(input_gml_path, layer=layer_name)
+    gdf.to_parquet(output_path, compression="snappy")
+    print(f"Written GeoParquet to {output_path}")
 
 
 def to_filename(ressurstittel, romligutstrekning, ressursdato, referansesystem):
