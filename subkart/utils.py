@@ -1,16 +1,15 @@
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.colors import BoundaryNorm
 
-import matplotlib.pyplot as plt
-import rasterio as rio
 import geoutils as gu
+import matplotlib.pyplot as plt
+import numpy as np
+import rasterio as rio
 import rasterio.plot
+from matplotlib.colors import BoundaryNorm
 from sqlalchemy import create_engine
 
-
 from subkart.features import MARINE_VANN_TYPE_DESC, VANNTYPER_COMBINED, marine_type_map
+
 
 def plot_one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
 
@@ -37,7 +36,7 @@ def plot_one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
 
 
 def plot_vanntyper(marine_type_raster, transform):
-    
+
     masked = np.ma.masked_less(marine_type_raster, 0)
     _, id_type_map, _ = marine_type_map()
     description = (
@@ -56,9 +55,7 @@ def plot_vanntyper(marine_type_raster, transform):
     ax.set_title("Marine vanntyper (Type IDs)")
 
     tick_locs = np.arange(num_classes)
-    tick_labels = [
-        f"{i}: {id_type_map[i]} – {description[id_type_map[i]]}" for i in tick_locs
-    ]
+    tick_labels = [f"{i}: {id_type_map[i]} – {description[id_type_map[i]]}" for i in tick_locs]
     cbar = fig.colorbar(im, ax=ax, ticks=tick_locs, fraction=0.046, pad=0.04)
     cbar.ax.set_yticklabels(tick_labels)
     cbar.ax.set_ylabel("Vanntype", rotation=90)
@@ -75,9 +72,7 @@ def to_postgis(gdf, fname):
     if os.environ.get("NIVAGIS_CONNECTION_STR"):
         table_name = "_".join(fname.split("_")[:-1])[:50]
         conn = create_engine(os.environ["NIVAGIS_CONNECTION_STR"])
-        gdf.to_postgis(
-            table_name, schema="naturkartmarin", con=conn, if_exists="replace"
-        )
+        gdf.to_postgis(table_name, schema="naturkartmarin", con=conn, if_exists="replace")
         print(f"Table {table_name} uploaded to PostGIS.")
     else:
         print("NIVAGIS_CONNECTION_STR not set. Skipping PostGIS upload.")
