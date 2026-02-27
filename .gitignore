@@ -13,3 +13,4 @@ mdir/*
 .env
 **egg-info/**
 **/*.joblib
+geonorge/*
