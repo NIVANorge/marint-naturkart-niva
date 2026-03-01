@@ -9,13 +9,41 @@ import geopandas as gpd
 from pathlib import Path
 from matplotlib.colors import BoundaryNorm
 from sqlalchemy import create_engine
+import xdem
 
-from subkart.features import MARINE_VANN_TYPE_DESC, VANNTYPER_COMBINED, marine_type_map
+import subkart
+
+
+def plot_terrain_features(gdf):
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+
+    gdf.plot(
+        column="depth",
+        cmap="viridis",
+        legend=True,
+        linewidth=0,
+        ax=axes[0],
+    )
+    axes[0].set_title("Depth (m)")
+    axes[0].set_axis_off()
+
+    gdf.plot(
+        column="slope",
+        cmap="terrain",
+        legend=True,
+        linewidth=0,
+        ax=axes[1],
+    )
+    axes[1].set_title("Slope (degrees)")
+    axes[1].set_axis_off()
+
+    plt.tight_layout()
 
 
 def plot_one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
 
-    _, id_type_map, _ = marine_type_map()
+    _, id_type_map, _ = subkart.features.marine_type_map()
     types = sorted(id_type_map.items())  # list of (class_id, type_code)
     n = len(types)
     fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
@@ -40,11 +68,11 @@ def plot_one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
 def plot_vanntyper(marine_type_raster, transform):
 
     masked = np.ma.masked_less(marine_type_raster, 0)
-    _, id_type_map, _ = marine_type_map()
+    _, id_type_map, _ = subkart.features.marine_type_map()
     description = (
-        MARINE_VANN_TYPE_DESC
+        subkart.features.MARINE_VANN_TYPE_DESC
         if "01" in id_type_map
-        else {k: " ".join(VANNTYPER_COMBINED[k]) for k in id_type_map.values()}
+        else {k: " ".join(subkart.features.VANNTYPER_COMBINED[k]) for k in id_type_map.values()}
     )
     num_classes = len(id_type_map)
     cmap = plt.cm.get_cmap("tab20", num_classes)

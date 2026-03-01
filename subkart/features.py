@@ -5,7 +5,7 @@ import geopandas as gpd
 import numpy as np
 import rasterio as rio
 import xdem
-from attr import attributes
+import geoutils as gu
 
 import subkart
 
@@ -55,7 +55,7 @@ def one_hot_encode_marine_types(marine_type_raster):
     return one_hot_types
 
 
-def rasterize_marine_types(marine_vanntyper, dem):
+def rasterize_marine_types(marine_vanntyper, out_shape, transform):
 
     _, id_type_map, type_id_map = marine_type_map()
     # Prepare shapes as (geometry, value)
@@ -65,8 +65,7 @@ def rasterize_marine_types(marine_vanntyper, dem):
     )
     shapes = [(geom, type_id_map[t]) for geom, t in zip(marine_vanntyper.geometry, marine_vanntyper["type_key"])]
 
-    out_shape = dem.data.shape[-2:]
-    transform = dem.transform
+
     marine_type_raster = rio.features.rasterize(
         shapes=shapes,
         out_shape=out_shape,
@@ -83,15 +82,18 @@ def build(dem: xdem.DEM, marine_vanntyper: gpd.GeoDataFrame) -> np.ndarray:
     """
     Build features from a digital elevation model (DEM) and marine types.
     """
+
     depth = np.ma.filled(dem.data, np.nan).astype(np.float32)
     slope, aspect, curvature = xdem.terrain.get_terrain_attribute(
         dem.data,
         resolution=dem.res,
         attribute=["slope", "aspect", "curvature"],
     )
+    transform, shape = dem.transform, dem.data.shape[-2:]
+
 
     marine_vanntyper = marine_vanntyper.to_crs(dem.crs)
-    marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, dem)
+    marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, dem.data.shape[-2:], dem.transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
 
     features = np.concatenate([np.stack([depth, slope, aspect, curvature], axis=-1), one_hot_types], axis=-1)
@@ -99,3 +101,53 @@ def build(dem: xdem.DEM, marine_vanntyper: gpd.GeoDataFrame) -> np.ndarray:
     valid_attrs = (~np.isnan(depth)) & (~np.isnan(slope)) & (~np.isnan(aspect)) & (~np.isnan(curvature))
 
     return features.astype("float32"), valid_attrs
+
+
+def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 25):
+    """
+    Rasterize the depth area from a GeoDataFrame.
+    """
+
+    
+    minx, miny, maxx, maxy = bounds
+    snapped_bounds = (
+        np.floor(minx / res) * res,
+        np.floor(miny / res) * res,
+        np.ceil(maxx / res) * res,
+        np.ceil(maxy / res) * res,
+    )
+
+    return vector.rasterize(
+        xres=res,
+        yres=res,
+        crs=vector.crs,
+        bounds=snapped_bounds,
+        in_value=in_values,
+        out_value=np.nan,
+    )
+
+def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame):
+
+    gdf_basis = gdf_basis.copy()
+    
+    gdf_basis['depth'] = (gdf_basis['maksimumsdybde']+gdf_basis['minimumsdybde'])/2
+    # Effective Width (or hydraulic mean width)
+    gdf_basis['slope'] = np.degrees(
+        np.arctan(
+            (gdf_basis['maksimumsdybde'] - gdf_basis['minimumsdybde']) /
+            (4 * gdf_basis.geometry.area / gdf_basis.geometry.length)
+        )
+    )
+    bounds = gdf_basis.total_bounds
+
+    vec_basis = gu.Vector(gdf_basis)
+    depth = subkart.features.rasterize_area(vec_basis, gdf_basis['depth'], bounds)
+    slope = subkart.features.rasterize_area(vec_basis, gdf_basis['slope'], bounds)
+
+    transform, out_shape = depth.transform, depth.data.shape[-2:]
+
+    marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
+    marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
+    one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
+
+    return depth, slope, one_hot_types
