@@ -2,10 +2,10 @@ import enum
 from pyexpat import features
 
 import geopandas as gpd
+import geoutils as gu
 import numpy as np
 import rasterio as rio
 import xdem
-import geoutils as gu
 
 import subkart
 
@@ -65,7 +65,6 @@ def rasterize_marine_types(marine_vanntyper, out_shape, transform):
     )
     shapes = [(geom, type_id_map[t]) for geom, t in zip(marine_vanntyper.geometry, marine_vanntyper["type_key"])]
 
-
     marine_type_raster = rio.features.rasterize(
         shapes=shapes,
         out_shape=out_shape,
@@ -91,7 +90,6 @@ def build(dem: xdem.DEM, marine_vanntyper: gpd.GeoDataFrame) -> np.ndarray:
     )
     transform, shape = dem.transform, dem.data.shape[-2:]
 
-
     marine_vanntyper = marine_vanntyper.to_crs(dem.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, dem.data.shape[-2:], dem.transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
@@ -108,7 +106,6 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 25):
     Rasterize the depth area from a GeoDataFrame.
     """
 
-    
     minx, miny, maxx, maxy = bounds
     snapped_bounds = (
         np.floor(minx / res) * res,
@@ -126,23 +123,24 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 25):
         out_value=np.nan,
     )
 
+
+def depth_preprocess(gdf: gpd.GeoDataFrame):
+    gdf = gdf.copy()
+    gdf["depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
+    # Effective Width (or hydraulic mean width)
+    gdf["slope"] = np.degrees(
+        np.arctan((gdf["maksimumsdybde"] - gdf["minimumsdybde"]) / (4 * gdf.geometry.area / gdf.geometry.length))
+    )
+    return gdf
+
+
 def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame):
 
-    gdf_basis = gdf_basis.copy()
-    
-    gdf_basis['depth'] = (gdf_basis['maksimumsdybde']+gdf_basis['minimumsdybde'])/2
-    # Effective Width (or hydraulic mean width)
-    gdf_basis['slope'] = np.degrees(
-        np.arctan(
-            (gdf_basis['maksimumsdybde'] - gdf_basis['minimumsdybde']) /
-            (4 * gdf_basis.geometry.area / gdf_basis.geometry.length)
-        )
-    )
     bounds = gdf_basis.total_bounds
 
     vec_basis = gu.Vector(gdf_basis)
-    depth = subkart.features.rasterize_area(vec_basis, gdf_basis['depth'], bounds)
-    slope = subkart.features.rasterize_area(vec_basis, gdf_basis['slope'], bounds)
+    depth = subkart.features.rasterize_area(vec_basis, gdf_basis["depth"], bounds)
+    slope = subkart.features.rasterize_area(vec_basis, gdf_basis["slope"], bounds)
 
     transform, out_shape = depth.transform, depth.data.shape[-2:]
 
@@ -151,3 +149,14 @@ def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDat
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
 
     return depth, slope, one_hot_types
+
+
+def stack(depth: gu.Raster, slope: gu.Raster, one_hot_types: np.ndarray) -> np.ndarray:
+    """
+    Stack multiple feature arrays along a new dimension.
+    """
+    features = np.concatenate([np.stack([depth.data.data, slope.data.data], axis=-1), one_hot_types], axis=-1)
+
+    valid_attrs = (~np.isnan(depth.data.data)) & (~np.isnan(slope.data.data))
+
+    return features, valid_attrs

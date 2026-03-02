@@ -1,17 +1,35 @@
 import os
+from pathlib import Path
 
+import geopandas as gpd
 import geoutils as gu
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio as rio
-import rasterio.plot
-import geopandas as gpd
-from pathlib import Path
 from matplotlib.colors import BoundaryNorm
 from sqlalchemy import create_engine
-import xdem
 
 import subkart
+
+
+def plot_prediction_raster(raster):
+    data = np.array(raster.data, dtype=float)
+    data[data == raster.nodata] = np.nan
+    data[~np.isin(data, [0, 1, 2])] = np.nan
+
+    # colormap: 0=bløtbunn(y), 1=blanding(p), 2=hardbunn(b)
+    cmap = mcolors.ListedColormap(["#FFB300", "#803E75", "#3270AE"])
+    bounds = [-0.5, 0.5, 1.5, 2.5]
+    norm = mcolors.BoundaryNorm(bounds, cmap.N)
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(data, cmap=cmap, norm=norm, interpolation="nearest")
+    ax.set_title("Predicted Bunntype")
+    cbar = fig.colorbar(im, ax=ax, ticks=[0, 1, 2], shrink=0.7)
+    cbar.ax.set_yticklabels(["bløtbunn", "blanding", "hardbunn"])
+    plt.tight_layout()
+    plt.show()
 
 
 def plot_terrain_features(gdf):
@@ -97,7 +115,7 @@ def to_geoparquet(input_gml_path: Path, layer_name: str, output_path: Path):
     """Save GML Download from NGU as GeoParquet
 
     Geoparquet is a really nice format for geospatial data optimized for cloud access.
-    
+
     """
     gdf = gpd.read_file(input_gml_path, layer=layer_name)
     gdf.to_parquet(output_path, compression="snappy")
