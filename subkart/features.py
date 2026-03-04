@@ -101,7 +101,7 @@ def build(dem: xdem.DEM, marine_vanntyper: gpd.GeoDataFrame) -> np.ndarray:
     return features.astype("float32"), valid_attrs
 
 
-def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 25):
+def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
     """
     Rasterize the depth area from a GeoDataFrame.
     """
@@ -127,7 +127,9 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 25):
 
 
 def depth_preprocess(gdf: gpd.GeoDataFrame):
-    gdf = gdf.copy()
+
+    gdf.dissolve(by="minimumsdybde", as_index=False)
+    gdf.explode(index_parts=False).reset_index()
     gdf["depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
     # Effective Width (or hydraulic mean width)
     gdf["slope"] = np.degrees(
@@ -136,7 +138,6 @@ def depth_preprocess(gdf: gpd.GeoDataFrame):
 
     gdf["compactness"] = 4 * np.pi * gdf.area / (gdf.length ** 2)
     gdf["convexity"] = gdf.area / gdf.geometry.convex_hull.area
-    
     
     return gdf
 
@@ -167,4 +168,4 @@ def stack(rasters: list[gu.Raster], one_hot_types: np.ndarray) -> tuple:
     arrays = [r.data.data for r in rasters]
     features = np.concatenate([np.stack(arrays, axis=-1), one_hot_types], axis=-1)
     valid_attrs = np.all([~np.isnan(arr) for arr in arrays], axis=0) & (~np.isnan(one_hot_types).any(axis=-1))
-    return features, valid_attrs
+    return features.astype("float32"), valid_attrs

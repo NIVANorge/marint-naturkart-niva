@@ -38,7 +38,7 @@ def plot_terrain_features(gdf):
         ("depth", "viridis", "Depth (m)"),
         ("slope", "terrain", "Slope (degrees)"),
         ("compactness", "plasma", "Compactness"),
-        ("convexity", "cividis", "Convexity"),
+        ("convexity", "plasma", "Convexity"),
     ]
 
     n = len(feature_cols)
