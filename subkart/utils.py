@@ -34,27 +34,26 @@ def plot_prediction_raster(raster):
 
 def plot_terrain_features(gdf):
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    feature_cols = [
+        ("depth", "viridis", "Depth (m)"),
+        ("slope", "terrain", "Slope (degrees)"),
+        ("compactness", "plasma", "Compactness"),
+        ("convexity", "cividis", "Convexity"),
+    ]
 
-    gdf.plot(
-        column="depth",
-        cmap="viridis",
-        legend=True,
-        linewidth=0,
-        ax=axes[0],
-    )
-    axes[0].set_title("Depth (m)")
-    axes[0].set_axis_off()
+    n = len(feature_cols)
+    fig, axes = plt.subplots(1, n, figsize=(6 * n, 8))
 
-    gdf.plot(
-        column="slope",
-        cmap="terrain",
-        legend=True,
-        linewidth=0,
-        ax=axes[1],
-    )
-    axes[1].set_title("Slope (degrees)")
-    axes[1].set_axis_off()
+    for ax, (col, cmap, title) in zip(axes, feature_cols):
+        gdf.plot(
+            column=col,
+            cmap=cmap,
+            legend=True,
+            linewidth=0,
+            ax=ax,
+        )
+        ax.set_title(title)
+        ax.set_axis_off()
 
     plt.tight_layout()
 

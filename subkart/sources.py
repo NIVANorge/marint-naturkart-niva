@@ -9,13 +9,28 @@ def basis_depth_data():
     Data downloaded from Geonorge, at https://kartkatalog.geonorge.no/metadata/sjoekart-dybdedata/2751aacf-5472-4850-a208-3532a51c529a?search=basisdata%20sj%C3%B8
     """
     layer = "Dybdeareal"
-    depth_mr = Path("../geonorge/Basisdata_15_More_og_Romsdal_25833_Dybdedata_GML.gml")
-    output_path = Path(f"../geonorge/Basisdata_15_More_og_Romsdal_25833_Dybdedata_{layer}.geo.parquet")
-    subkart.utils.to_geoparquet(depth_mr, layer, output_path)
 
-    depth_vl = Path("../geonorge/Basisdata_46_Vestland_25833_Dybdedata_GML.gml")
-    output_path = Path(f"../geonorge/Basisdata_46_Vestland_25833_Dybdedata_{layer}.geo.parquet")
-    subkart.utils.to_geoparquet(depth_vl, layer, output_path)
+    regions = [
+        ("Oslo", "03"),
+        ("Rogaland", "11"),
+        ("More_og_Romsdal", "15"),
+        ("Nordland", "18"),
+        ("Svalbard", "21"),
+        ("Ostfold", "31"),
+        ("Akershus", "32"),
+        ("Buskerud", "33"),
+        ("Vestfold", "39"),
+        ("Telemark", "40"),
+        ("Agder", "42"),
+        ("Vestland", "46"),
+        ("Trondelag", "50"),
+        ("Troms", "55"),
+        ("Finnmark", "56"),
+    ]
+    for region_name, region_code in regions:
+        gml_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_GML.gml")
+        output_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_{layer}.geo.parquet")
+        subkart.utils.to_geoparquet(gml_path, layer, output_path)
 
 
 def bunnsediment_kornstor_detalj():

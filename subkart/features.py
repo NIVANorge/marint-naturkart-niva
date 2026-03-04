@@ -124,6 +124,8 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 25):
     )
 
 
+
+
 def depth_preprocess(gdf: gpd.GeoDataFrame):
     gdf = gdf.copy()
     gdf["depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
@@ -131,32 +133,38 @@ def depth_preprocess(gdf: gpd.GeoDataFrame):
     gdf["slope"] = np.degrees(
         np.arctan((gdf["maksimumsdybde"] - gdf["minimumsdybde"]) / (4 * gdf.geometry.area / gdf.geometry.length))
     )
+
+    gdf["compactness"] = 4 * np.pi * gdf.area / (gdf.length ** 2)
+    gdf["convexity"] = gdf.area / gdf.geometry.convex_hull.area
+    
+    
     return gdf
 
 
 def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame):
 
     bounds = gdf_basis.total_bounds
-
     vec_basis = gu.Vector(gdf_basis)
-    depth = subkart.features.rasterize_area(vec_basis, gdf_basis["depth"], bounds)
-    slope = subkart.features.rasterize_area(vec_basis, gdf_basis["slope"], bounds)
-
+    feature_names = ["depth", "slope", "compactness", "convexity"]
+    rasters = []
+    for name in feature_names:
+        rasters.append(subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds))
+    
+    depth = rasters[0]
     transform, out_shape = depth.transform, depth.data.shape[-2:]
 
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
 
-    return depth, slope, one_hot_types
+    return rasters, one_hot_types
 
 
-def stack(depth: gu.Raster, slope: gu.Raster, one_hot_types: np.ndarray) -> np.ndarray:
+def stack(rasters: list[gu.Raster], one_hot_types: np.ndarray) -> tuple:
     """
-    Stack multiple feature arrays along a new dimension.
+    Stack any number of Raster feature arrays and one-hot types, returning features and valid mask.
     """
-    features = np.concatenate([np.stack([depth.data.data, slope.data.data], axis=-1), one_hot_types], axis=-1)
-
-    valid_attrs = (~np.isnan(depth.data.data)) & (~np.isnan(slope.data.data))
-
+    arrays = [r.data.data for r in rasters]
+    features = np.concatenate([np.stack(arrays, axis=-1), one_hot_types], axis=-1)
+    valid_attrs = np.all([~np.isnan(arr) for arr in arrays], axis=0) & (~np.isnan(one_hot_types).any(axis=-1))
     return features, valid_attrs
