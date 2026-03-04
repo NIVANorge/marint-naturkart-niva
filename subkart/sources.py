@@ -1,4 +1,8 @@
+from logging import root
 from pathlib import Path
+from shapely.errors import GEOSException
+from shapely.validation import explain_validity, make_valid
+import geopandas as gpd
 
 import subkart
 
@@ -32,6 +36,40 @@ def basis_depth_data():
         output_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_{layer}.geo.parquet")
         subkart.utils.to_geoparquet(gml_path, layer, output_path)
 
+def preprocess_basisdata(root_path: Path):
+    """Preprocess basis data for analysis."""
+
+
+    parquet_files = sorted(root.rglob("*_25833_Dybdedata_Dybdeareal.geo.parquet"))
+
+    print(f"Found {len(parquet_files)} dybdedata files")
+    for p in parquet_files:
+        print(f"Processing: {p}")
+
+        # Read original file
+        gdf = gpd.read_parquet(p)
+
+        # Dissolve by "minimumsdybde"
+        try:
+            gdf_dissolved = gdf.dissolve(by="minimumsdybde", as_index=False)
+        except GEOSException as e:
+            invalid_mask = ~gdf.geometry.is_valid
+            bad = gdf.loc[invalid_mask].copy()
+
+            print(f"Invalid geometries: {invalid_mask.sum()} / {len(gdf)}")
+            for i, geom in zip(bad.index, bad.geometry):
+                print(i, explain_validity(geom)) 
+            gdf["geometry"] = gdf.geometry.apply(make_valid)
+            print(f"TopologicalError while dissolving {p}: {e}")
+            gdf_dissolved = gdf.dissolve(by="minimumsdybde", as_index=False)
+            
+        # Explode dissolved geometry
+        gdf_exploded = gdf_dissolved.explode(index_parts=False).reset_index(drop=True)
+
+        # Overwrite the original parquet with processed data
+        gdf_exploded.to_parquet(p)
+
+        print(f"Written exploded GeoDataFrame back to: {p}")
 
 def bunnsediment_kornstor_detalj():
     """Prepare bunnsediment kornstor detalj data for processing.
