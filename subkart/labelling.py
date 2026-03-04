@@ -1,7 +1,7 @@
 import numpy as np
 import rasterio as rio
 
-BUNNTYPE_MAPPING = {"løsbunn": 0, "blanding/uspesifisert": 1, "fastbunn": 2}
+BUNNTYPE_MAPPING = {"løsbunn": 0, "blanding": 1, "fastbunn": 2}
 
 
 def rasterize_bunn_type(gdf, out_shape, transform):
