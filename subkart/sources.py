@@ -1,7 +1,5 @@
 from logging import root
 from pathlib import Path
-from shapely.errors import GEOSException
-from shapely.validation import explain_validity, make_valid
 import geopandas as gpd
 
 import subkart
@@ -34,7 +32,10 @@ def basis_depth_data():
     for region_name, region_code in regions:
         gml_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_GML.gml")
         output_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_{layer}.geo.parquet")
-        subkart.utils.to_geoparquet(gml_path, layer, output_path)
+        gdf = gpd.read_file(gml_path, layer=layer)
+        gdf = subkart.utils.dissolve_geometries(gdf, by_col="minimumsdybde")
+        gdf.to_parquet(output_path, compression="snappy")
+        print(f"Written GeoParquet to {output_path}")
 
 def preprocess_basisdata(root_path: Path):
     """Preprocess basis data for analysis."""
