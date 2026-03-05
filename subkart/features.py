@@ -128,6 +128,7 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
 
 def depth_preprocess(gdf: gpd.GeoDataFrame):
 
+    gdf[["minimumsdybde", "maksimumsdybde"]] = gdf[["minimumsdybde", "maksimumsdybde"]].astype(np.float32)
     gdf.dissolve(by="minimumsdybde", as_index=False)
     gdf.explode(index_parts=False).reset_index()
     gdf["depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
