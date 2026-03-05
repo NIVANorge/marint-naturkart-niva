@@ -21,6 +21,7 @@ dependencies = [
     "sqlalchemy>=2.0.46",
     "xdem>=0.2.2",
     "gcsfs (>=2026.2.0,<2027.0.0)",
+    "xgboost (>=3.2.0,<4.0.0)",
 ]
 
 [tool.poetry.group.dev.dependencies]
