@@ -34,6 +34,7 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
+TERRAIN_NAMES = ["depth", "slope", "compactness", "convexity"]
 
 def marine_type_map():
     types = VANNTYPER_COMBINED.keys()
@@ -143,13 +144,13 @@ def depth_preprocess(gdf: gpd.GeoDataFrame):
     return gdf
 
 
-def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame):
+def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame, res: int = 50) -> tuple:
 
     bounds = gdf_basis.total_bounds
     vec_basis = gu.Vector(gdf_basis)
-    feature_names = ["depth", "slope", "compactness", "convexity"]
+    
     rasters = []
-    for name in feature_names:
+    for name in TERRAIN_NAMES:
         rasters.append(subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds))
     
     depth = rasters[0]
