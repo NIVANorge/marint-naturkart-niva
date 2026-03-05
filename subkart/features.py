@@ -56,14 +56,12 @@ def one_hot_encode_marine_types(marine_type_raster):
     return one_hot_types
 
 
+
 def rasterize_marine_types(marine_vanntyper, out_shape, transform):
 
     _, id_type_map, type_id_map = marine_type_map()
     # Prepare shapes as (geometry, value)
-    marine_vanntyper = marine_vanntyper.copy()
-    marine_vanntyper["type_key"] = marine_vanntyper["Type"].map(
-        lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x)
-    )
+
     shapes = [(geom, type_id_map[t]) for geom, t in zip(marine_vanntyper.geometry, marine_vanntyper["type_key"])]
 
     marine_type_raster = rio.features.rasterize(
@@ -125,7 +123,13 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
     )
 
 
+def marine_vanntyper_preprocess(marine_vanntyper: gpd.GeoDataFrame):
 
+    marine_vanntyper["type_key"] = marine_vanntyper["Type"].map(
+        lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x)
+    )
+
+    return marine_vanntyper
 
 def depth_preprocess(gdf: gpd.GeoDataFrame):
 
@@ -145,29 +149,43 @@ def depth_preprocess(gdf: gpd.GeoDataFrame):
 
 
 def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame, res: int = 50) -> tuple:
-
     bounds = gdf_basis.total_bounds
     vec_basis = gu.Vector(gdf_basis)
     
-    rasters = []
-    for name in TERRAIN_NAMES:
-        rasters.append(subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res))
+    arrays = []
+    transform = None
+    out_shape = None
     
-    depth = rasters[0]
-    transform, out_shape = depth.transform, depth.data.shape[-2:]
-
+    # Process one by one and delete the raster object to save memory
+    for i, name in enumerate(TERRAIN_NAMES):
+        raster = subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res)
+        
+        if i == 0:
+            transform, out_shape = raster.transform, raster.data.shape[-2:]
+            
+        arrays.append(raster.data.data)
+        del raster
+    
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
+    del marine_type_raster  # Free intermediate marine raster
 
-    return rasters, one_hot_types
+    features, valid_attrs = stack(arrays, one_hot_types)
+
+    return features, valid_attrs, out_shape, transform
 
 
-def stack(rasters: list[gu.Raster], one_hot_types: np.ndarray) -> tuple:
+def stack(arrays: list[np.ndarray], one_hot_types: np.ndarray) -> tuple:
     """
-    Stack any number of Raster feature arrays and one-hot types, returning features and valid mask.
+    Stack feature arrays and one-hot types, returning a 2D scikit-ready dataset.
     """
-    arrays = [r.data.data for r in rasters]
-    features = np.concatenate([np.stack(arrays, axis=-1), one_hot_types], axis=-1)
-    valid_attrs = np.all([~np.isnan(arr) for arr in arrays], axis=0) & (~np.isnan(one_hot_types).any(axis=-1))
-    return features.astype("float32"), valid_attrs
+    terrain_stack = np.stack(arrays, axis=-1)
+    del arrays
+    
+    features = np.concatenate([terrain_stack, one_hot_types], axis=-1)
+    del terrain_stack
+    
+    valid_attrs = ~np.isnan(features).any(axis=-1)
+
+    return features, valid_attrs
