@@ -188,7 +188,7 @@ def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDat
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
     del marine_type_raster  # Free intermediate marine raster
     print(f"Stacking feature arrays...")
-    features, valid_attrs = stack(arrays, one_hot_types)
+    features, valid_attrs = stack(arrays, one_hot_types, valid_mask)
 
     return features, valid_attrs, out_shape, transform
 
