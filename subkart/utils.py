@@ -37,10 +37,10 @@ def plot_prediction_raster(raster):
 def plot_terrain_features(gdf):
 
     feature_cols = [
-        ("depth", "viridis", "Depth (m)"),
-        ("slope", "terrain", "Slope (degrees)"),
-        ("compactness", "plasma", "Compactness"),
-        ("convexity", "plasma", "Convexity"),
+        (subkart.features.TERRAIN_NAMES[0], "viridis", "Depth (m)"),
+        (subkart.features.TERRAIN_NAMES[1], "terrain", "Slope (degrees)"),
+        (subkart.features.TERRAIN_NAMES[2], "plasma", "Compactness"),
+        (subkart.features.TERRAIN_NAMES[3], "plasma", "Convexity"),
     ]
 
     n = len(feature_cols)
