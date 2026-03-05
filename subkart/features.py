@@ -188,7 +188,7 @@ def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDat
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
     del marine_type_raster  # Free intermediate marine raster
     print(f"Stacking feature arrays...")
-    features, valid_attrs = stack(arrays, one_hot_types, valid_mask)
+    features, valid_attrs = stack(arrays, one_hot_types, valid_mask, dtype)
 
     return features, valid_attrs, out_shape, transform
 
@@ -216,7 +216,7 @@ def stack(arrays: list[np.ndarray],
 
     col = 0
     for feature_array in arrays:
-        stacked_features[:, col] = feature_array[valid_mask].astype(dtype, copy=False)
+        stacked_features[:, col] = feature_array[valid_mask]
         col += 1
 
     one_hot_types_2d = one_hot_types.reshape(-1, num_marine_types)
