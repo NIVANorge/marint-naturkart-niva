@@ -151,7 +151,7 @@ def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDat
     
     rasters = []
     for name in TERRAIN_NAMES:
-        rasters.append(subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds))
+        rasters.append(subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res))
     
     depth = rasters[0]
     transform, out_shape = depth.transform, depth.data.shape[-2:]
