@@ -84,32 +84,18 @@ def plot_one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
     plt.tight_layout()
 
 
-def plot_vanntyper(marine_type_raster, transform):
+def plot_vanntyper(marine_vanntyper):
 
-    masked = np.ma.masked_less(marine_type_raster, 0)
-    _, id_type_map, _ = subkart.features.marine_type_map()
-    description = (
-        subkart.features.MARINE_VANN_TYPE_DESC
-        if "01" in id_type_map
-        else {k: " ".join(subkart.features.VANNTYPER_COMBINED[k]) for k in id_type_map.values()}
+    ax = marine_vanntyper.plot(
+        column="type_key",
+        legend=True,
+        figsize=(8, 8),
+        edgecolor="black",
+        linewidth=0.2,
+        alpha=0.7,
     )
-    num_classes = len(id_type_map)
-    cmap = plt.cm.get_cmap("tab20", num_classes)
-    cmap.set_bad(color="lightgrey", alpha=0.3)
-    norm = BoundaryNorm(np.arange(-0.5, num_classes + 0.5, 1), ncolors=cmap.N)
 
-    extent = rio.plot.plotting_extent(marine_type_raster, transform=transform)
-    fig, ax = plt.subplots(figsize=(10, 10))
-    im = ax.imshow(masked, cmap=cmap, norm=norm, extent=extent, origin="upper")
-    ax.set_title("Marine vanntyper (Type IDs)")
-
-    tick_locs = np.arange(num_classes)
-    tick_labels = [f"{i}: {id_type_map[i]} – {description[id_type_map[i]]}" for i in tick_locs]
-    cbar = fig.colorbar(im, ax=ax, ticks=tick_locs, fraction=0.046, pad=0.04)
-    cbar.ax.set_yticklabels(tick_labels)
-    cbar.ax.set_ylabel("Vanntype", rotation=90)
-
-    plt.show()
+    ax.set_title("marine_vanntyper")
 
 def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
     """Dissolve geometries to fix neighboring features that are split on same depth
