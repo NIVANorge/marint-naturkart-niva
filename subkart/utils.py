@@ -39,8 +39,8 @@ def plot_prediction_raster(raster):
 def plot_terrain_features(gdf):
 
     feature_cols = [
-        (subkart.features.SEA_MAP_NAMES[0], "viridis", "Depth (m)"),
-        (subkart.features.SEA_MAP_NAMES[1], "terrain", "Slope (degrees)"),
+        (subkart.features.SEA_MAP_NAMES[0], "viridis", "Avg Depth (m)"),
+        (subkart.features.SEA_MAP_NAMES[1], "terrain", "Avg Slope (degrees)"),
         (subkart.features.SEA_MAP_NAMES[2], "plasma", "Compactness"),
         (subkart.features.SEA_MAP_NAMES[3], "plasma", "Convexity"),
     ]

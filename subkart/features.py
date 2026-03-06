@@ -36,8 +36,11 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
+DEM_FEATURE_NAMES = ["depth", "slope", "curvature", "is_dem"]
 SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
-DEM_FEATURE_NAMES = ["depth", "slope", "curvature"]
+
+DEPTH_FEATURES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
+FEATURES = DEPTH_FEATURES + list(VANNTYPER_COMBINED.keys())
 
 def marine_type_map():
     types = VANNTYPER_COMBINED.keys()
@@ -171,30 +174,33 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
 def build_basis_raster(dem: xdem.DEM, gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame, valid_mask: np.ndarray, res: int = 50, dtype=np.float32) -> tuple:
     transform, out_shape, bounds = to_raster_shapes(gdf_basis, res)
     
-    depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
-    slope, curvature = xdem.terrain.get_terrain_attribute(
-        dem.data,
-        resolution=res,
-        attribute=["slope", "curvature"],
-    )
-    
     vec_basis = gu.Vector(gdf_basis)
-    
-    arrays = []
-    
+
+    arrays = len(DEPTH_FEATURES) * [None]
+
     for i, name in enumerate(SEA_MAP_NAMES):
         print(f"Processing {name}...")
         raster = subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res)
-        arrays.append(raster.data.data.astype(dtype, copy=False))
+        data = raster.data.data.astype(dtype, copy=False)
+        arrays[DEPTH_FEATURES.index(name)] = data
         if name == "avg_depth":
-            arrays.append(depth)
+            depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
+            depth_filled = np.where(np.isnan(depth), data, depth)
+            arrays[DEPTH_FEATURES.index("depth")] = depth_filled.astype(dtype, copy=False)
+            del depth, depth_filled
         elif name == "avg_slope":
-            arrays.append(slope)
-        elif name == "curvature":
-            arrays.append(curvature)
-        else:
-            arrays.append(raster.data.data.astype(dtype, copy=False))
-        del raster
+            slope, curvature = xdem.terrain.get_terrain_attribute(
+                dem.data,
+                resolution=res,
+                attribute=["slope", "curvature"],
+            )
+            slope_filled = np.where(np.isnan(slope), data, slope)
+            arrays[DEPTH_FEATURES.index("slope")] = slope_filled.astype(dtype, copy=False)
+            arrays[DEPTH_FEATURES.index("curvature")] = np.nan_to_num(curvature, nan=0.0).astype(dtype, copy=False) # Set to flat
+            del slope, curvature
+        del raster, data
+
+    arrays[DEPTH_FEATURES.index("is_dem")] = np.where(np.isnan(dem.data), 0, 1).astype(np.int8, copy=False)
     print(f"Processing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
