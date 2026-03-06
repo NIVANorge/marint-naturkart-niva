@@ -36,7 +36,7 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
-TERRAIN_NAMES = ["depth", "slope", "compactness", "convexity"]
+TERRAIN_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
 
 def marine_type_map():
     types = VANNTYPER_COMBINED.keys()
@@ -137,9 +137,9 @@ def depth_preprocess(gdf: gpd.GeoDataFrame):
     gdf[["minimumsdybde", "maksimumsdybde"]] = gdf[["minimumsdybde", "maksimumsdybde"]].astype(np.float32)
     gdf.dissolve(by="minimumsdybde", as_index=False)
     gdf.explode(index_parts=False).reset_index()
-    gdf["depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
+    gdf["avg_depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
     # Effective Width (or hydraulic mean width)
-    gdf["slope"] = np.degrees(
+    gdf["avg_slope"] = np.degrees(
         np.arctan((gdf["maksimumsdybde"] - gdf["minimumsdybde"]) / (4 * gdf.geometry.area / gdf.geometry.length))
     )
 
