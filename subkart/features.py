@@ -36,7 +36,8 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
-TERRAIN_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
+SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
+DEM_FEATURE_NAMES = ["depth", "slope", "curvature"]
 
 def marine_type_map():
     types = VANNTYPER_COMBINED.keys()
@@ -167,20 +168,32 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     return transform, out_shape, snapped_bounds
 
 
-def build_basis_raster(gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame, valid_mask: np.ndarray, res: int = 50, dtype=np.float32) -> tuple:
+def build_basis_raster(dem: xdem.DEM, gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame, valid_mask: np.ndarray, res: int = 50, dtype=np.float32) -> tuple:
     transform, out_shape, bounds = to_raster_shapes(gdf_basis, res)
+    
+    depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
+    slope, curvature = xdem.terrain.get_terrain_attribute(
+        dem.data,
+        resolution=res,
+        attribute=["slope", "curvature"],
+    )
+    
     vec_basis = gu.Vector(gdf_basis)
     
     arrays = []
     
-    for i, name in enumerate(TERRAIN_NAMES):
+    for i, name in enumerate(SEA_MAP_NAMES):
         print(f"Processing {name}...")
         raster = subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res)
-        
-        if i == 0:
-            transform, out_shape = raster.transform, raster.data.shape[-2:]
-
         arrays.append(raster.data.data.astype(dtype, copy=False))
+        if name == "avg_depth":
+            arrays.append(depth)
+        elif name == "avg_slope":
+            arrays.append(slope)
+        elif name == "curvature":
+            arrays.append(curvature)
+        else:
+            arrays.append(raster.data.data.astype(dtype, copy=False))
         del raster
     print(f"Processing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)

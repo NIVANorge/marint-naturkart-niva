@@ -11,6 +11,8 @@ from matplotlib.colors import BoundaryNorm
 from sqlalchemy import create_engine
 from shapely.errors import GEOSException
 from shapely.validation import explain_validity, make_valid
+import xdem
+
 
 import subkart
 
@@ -37,10 +39,10 @@ def plot_prediction_raster(raster):
 def plot_terrain_features(gdf):
 
     feature_cols = [
-        (subkart.features.TERRAIN_NAMES[0], "viridis", "Depth (m)"),
-        (subkart.features.TERRAIN_NAMES[1], "terrain", "Slope (degrees)"),
-        (subkart.features.TERRAIN_NAMES[2], "plasma", "Compactness"),
-        (subkart.features.TERRAIN_NAMES[3], "plasma", "Convexity"),
+        (subkart.features.SEA_MAP_NAMES[0], "viridis", "Depth (m)"),
+        (subkart.features.SEA_MAP_NAMES[1], "terrain", "Slope (degrees)"),
+        (subkart.features.SEA_MAP_NAMES[2], "plasma", "Compactness"),
+        (subkart.features.SEA_MAP_NAMES[3], "plasma", "Convexity"),
     ]
 
     n = len(feature_cols)
@@ -97,10 +99,9 @@ def plot_vanntyper(marine_vanntyper):
 
     ax.set_title("marine_vanntyper")
 
+
 def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
-    """Dissolve geometries to fix neighboring features that are split on same depth
-    
-    """
+    """Dissolve geometries to fix neighboring features that are split on same depth"""
     # Dissolve by "minimumsdybde"
     try:
         gdf_dissolved = gdf.dissolve(by=by_col, as_index=False)
@@ -111,7 +112,7 @@ def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
 
         print(f"Invalid geometries: {invalid_mask.sum()} / {len(gdf)}")
         for i, geom in zip(bad.index, bad.geometry):
-            print(i, explain_validity(geom)) 
+            print(i, explain_validity(geom))
         gdf["geometry"] = gdf.geometry.apply(make_valid)
         gdf_dissolved = gdf.dissolve(by=by_col, as_index=False)
 
@@ -119,6 +120,22 @@ def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
     gdf_exploded = gdf_dissolved.explode(index_parts=False).reset_index(drop=True)
 
     return gdf_exploded
+
+
+def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25833"):
+    dst_array = np.empty(out_shape, dtype=dem.data.dtype)
+    rio.warp.reproject(
+        source=dem.data,
+        destination=dst_array,
+        src_transform=transform,
+        src_crs=dem.crs,
+        dst_transform=transform,
+        dst_crs=crs,
+        resampling=rio.warp.Resampling.bilinear,  # or nearest, cubic, cubic_spline, etc.
+    )
+
+    return xdem.DEM.from_array(dst_array, transform=transform, crs=crs)
+
 
 def to_geoparquet(input_gml_path: Path, layer_name: str, output_path: Path):
     """Save GML Download from NGU as GeoParquet
