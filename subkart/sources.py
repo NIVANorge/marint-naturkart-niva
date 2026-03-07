@@ -1,5 +1,6 @@
 from logging import root
 from pathlib import Path
+
 import geopandas as gpd
 
 import subkart
@@ -37,9 +38,9 @@ def basis_depth_data():
         gdf.to_parquet(output_path, compression="snappy")
         print(f"Written GeoParquet to {output_path}")
 
+
 def preprocess_basisdata(root_path: Path):
     """Preprocess basis data for analysis."""
-
 
     parquet_files = sorted(root.rglob("*_25833_Dybdedata_Dybdeareal.geo.parquet"))
 
@@ -59,11 +60,11 @@ def preprocess_basisdata(root_path: Path):
 
             print(f"Invalid geometries: {invalid_mask.sum()} / {len(gdf)}")
             for i, geom in zip(bad.index, bad.geometry):
-                print(i, explain_validity(geom)) 
+                print(i, explain_validity(geom))
             gdf["geometry"] = gdf.geometry.apply(make_valid)
             print(f"TopologicalError while dissolving {p}: {e}")
             gdf_dissolved = gdf.dissolve(by="minimumsdybde", as_index=False)
-            
+
         # Explode dissolved geometry
         gdf_exploded = gdf_dissolved.explode(index_parts=False).reset_index(drop=True)
 
@@ -71,6 +72,7 @@ def preprocess_basisdata(root_path: Path):
         gdf_exploded.to_parquet(p)
 
         print(f"Written exploded GeoDataFrame back to: {p}")
+
 
 def bunnsediment_kornstor_detalj():
     """Prepare bunnsediment kornstor detalj data for processing.

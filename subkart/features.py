@@ -6,8 +6,8 @@ import geopandas as gpd
 import geoutils as gu
 import numpy as np
 import rasterio as rio
-from shapely import bounds
 import xdem
+from shapely import bounds
 
 import subkart
 
@@ -41,6 +41,7 @@ SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
 
 DEPTH_FEATURES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
 FEATURES = DEPTH_FEATURES + list(VANNTYPER_COMBINED.keys())
+
 
 def marine_type_map():
     types = VANNTYPER_COMBINED.keys()
@@ -136,6 +137,7 @@ def marine_vanntyper_preprocess(marine_vanntyper: gpd.GeoDataFrame):
 
     return marine_vanntyper
 
+
 def depth_preprocess(gdf: gpd.GeoDataFrame):
 
     gdf[["minimumsdybde", "maksimumsdybde"]] = gdf[["minimumsdybde", "maksimumsdybde"]].astype(np.float32)
@@ -147,10 +149,11 @@ def depth_preprocess(gdf: gpd.GeoDataFrame):
         np.arctan((gdf["maksimumsdybde"] - gdf["minimumsdybde"]) / (4 * gdf.geometry.area / gdf.geometry.length))
     )
 
-    gdf["compactness"] = 4 * np.pi * gdf.area / (gdf.length ** 2)
+    gdf["compactness"] = 4 * np.pi * gdf.area / (gdf.length**2)
     gdf["convexity"] = gdf.area / gdf.geometry.convex_hull.area
-    
+
     return gdf
+
 
 def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     """
@@ -171,9 +174,16 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     return transform, out_shape, snapped_bounds
 
 
-def build_basis_raster(dem: xdem.DEM, gdf_basis: gpd.GeoDataFrame, marine_vanntyper: gpd.GeoDataFrame, valid_mask: np.ndarray, res: int = 50, dtype=np.float32) -> tuple:
+def build_basis_raster(
+    dem: xdem.DEM,
+    gdf_basis: gpd.GeoDataFrame,
+    marine_vanntyper: gpd.GeoDataFrame,
+    valid_mask: np.ndarray,
+    res: int = 50,
+    dtype=np.float32,
+) -> tuple:
     transform, out_shape, bounds = to_raster_shapes(gdf_basis, res)
-    
+
     vec_basis = gu.Vector(gdf_basis)
 
     arrays = len(DEPTH_FEATURES) * [None]
@@ -196,7 +206,9 @@ def build_basis_raster(dem: xdem.DEM, gdf_basis: gpd.GeoDataFrame, marine_vannty
             )
             slope_filled = np.where(np.isnan(slope), data, slope)
             arrays[DEPTH_FEATURES.index("slope")] = slope_filled.astype(dtype, copy=False)
-            arrays[DEPTH_FEATURES.index("curvature")] = np.nan_to_num(curvature, nan=0.0).astype(dtype, copy=False) # Set to flat
+            arrays[DEPTH_FEATURES.index("curvature")] = np.nan_to_num(curvature, nan=0.0).astype(
+                dtype, copy=False
+            )  # Set to flat
             del slope, curvature
         del raster, data
 
@@ -212,11 +224,9 @@ def build_basis_raster(dem: xdem.DEM, gdf_basis: gpd.GeoDataFrame, marine_vannty
     return features, valid_attrs, out_shape, transform
 
 
-def stack(arrays: list[np.ndarray],
-          one_hot_types: np.ndarray,
-          valid_mask: np.ndarray=None,
-          dtype=np.float32
-         ) -> tuple[np.ndarray, np.ndarray]:
+def stack(
+    arrays: list[np.ndarray], one_hot_types: np.ndarray, valid_mask: np.ndarray = None, dtype=np.float32
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Stack feature arrays and one-hot types into a 2D scikit-ready dataset,
     while minimizing peak memory by avoiding 3D intermediates.
@@ -225,7 +235,6 @@ def stack(arrays: list[np.ndarray],
         valid_mask = np.ones(arrays[0].shape, dtype=bool)
     for a in arrays:
         valid_mask &= np.isfinite(a)
-
 
     valid_mask &= np.isfinite(one_hot_types).all(axis=-1)
     n_valid = int(valid_mask.sum())
@@ -239,6 +248,6 @@ def stack(arrays: list[np.ndarray],
         col += 1
 
     one_hot_types_2d = one_hot_types.reshape(-1, num_marine_types)
-    stacked_features[:, col:col+num_marine_types] = one_hot_types_2d[valid_mask.ravel(), :]
+    stacked_features[:, col : col + num_marine_types] = one_hot_types_2d[valid_mask.ravel(), :]
 
     return stacked_features, valid_mask
