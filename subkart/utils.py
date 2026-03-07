@@ -7,12 +7,11 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 import rasterio as rio
+import xdem
 from matplotlib.colors import BoundaryNorm
-from sqlalchemy import create_engine
 from shapely.errors import GEOSException
 from shapely.validation import explain_validity, make_valid
-import xdem
-
+from sqlalchemy import create_engine
 
 import subkart
 

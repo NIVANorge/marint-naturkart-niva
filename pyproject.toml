@@ -26,8 +26,9 @@ dependencies = [
 
 [tool.poetry.group.dev.dependencies]
 isort = "^8.0.0"
-black = {extras = ["jupyter"], version = "^26.1.0"}
+black = {extras = ["jupyter"], version = "^26.3.0"}
 ipykernel = "^7.2.0"
+nbqa = "^1.9.1"
 
 
 [build-system]
