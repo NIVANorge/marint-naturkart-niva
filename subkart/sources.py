@@ -55,7 +55,8 @@ def sea_map_basisdata(fylker: list[str] = FYLKER):
         return gpd.read_parquet("gs://niva-geodata/MarintNaturKart/depth_training_data.geo.parquet")
 
     county_files = []
-    for code in fylker:
+    for f in fylker:
+        code = next((c for c in FYLKER if c.endswith(f)))
         county_files.append(
             f"gs://niva-geodata/MarintNaturKart/Basisdata_{code}_25833_Dybdedata_Dybdeareal.geo.parquet"
         )
