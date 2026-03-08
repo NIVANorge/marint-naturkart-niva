@@ -2,76 +2,69 @@ from logging import root
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 
 import subkart
 
+FYLKER = [
+    "03_Oslo",
+    "11_Rogaland",
+    "15_More_og_Romsdal",
+    "18_Nordland",
+    "21_Svalbard",
+    "31_Ostfold",
+    "32_Akershus",
+    "33_Buskerud",
+    "39_Vestfold",
+    "40_Telemark",
+    "42_Agder",
+    "46_Vestland",
+    "50_Trondelag",
+    "55_Troms",
+    "56_Finnmark",
+]
 
-def basis_depth_data():
+
+def prepare_sea_basis_depth_data():
     """Prepare basis depth data for processing.
 
     Data downloaded from Geonorge, at https://kartkatalog.geonorge.no/metadata/sjoekart-dybdedata/2751aacf-5472-4850-a208-3532a51c529a?search=basisdata%20sj%C3%B8
+    This data is used as a basis for further analysis and modeling and output saved to geoparquet format.
     """
     layer = "Dybdeareal"
 
-    regions = [
-        ("Oslo", "03"),
-        ("Rogaland", "11"),
-        ("More_og_Romsdal", "15"),
-        ("Nordland", "18"),
-        ("Svalbard", "21"),
-        ("Ostfold", "31"),
-        ("Akershus", "32"),
-        ("Buskerud", "33"),
-        ("Vestfold", "39"),
-        ("Telemark", "40"),
-        ("Agder", "42"),
-        ("Vestland", "46"),
-        ("Trondelag", "50"),
-        ("Troms", "55"),
-        ("Finnmark", "56"),
-    ]
-    for region_name, region_code in regions:
-        gml_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_GML.gml")
-        output_path = Path(f"../geonorge/Basisdata_{region_code}_{region_name}_25833_Dybdedata_{layer}.geo.parquet")
+
+    for region in FYLKER:
+        gml_path = Path(f"../geonorge/Basisdata_{region}_25833_Dybdedata_GML.gml")
+        output_path = Path(f"../geonorge/Basisdata_{region}_25833_Dybdedata_{layer}.geo.parquet")
         gdf = gpd.read_file(gml_path, layer=layer)
         gdf = subkart.utils.dissolve_geometries(gdf, by_col="minimumsdybde")
         gdf.to_parquet(output_path, compression="snappy")
         print(f"Written GeoParquet to {output_path}")
 
 
-def preprocess_basisdata(root_path: Path):
-    """Preprocess basis data for analysis."""
+def sea_map_basisdata(fylker: list[str] = FYLKER):
+    """Map basis data for the specified fylker or all
 
-    parquet_files = sorted(root.rglob("*_25833_Dybdedata_Dybdeareal.geo.parquet"))
+    Read output from `prepare_basis_depth_data`, if all fylker are specified `depth_training_data.geo.parquet` will be used
+    it already have been preprocessed to add depth features from `features.depth_preprocess`.
+    """
 
-    print(f"Found {len(parquet_files)} dybdedata files")
-    for p in parquet_files:
-        print(f"Processing: {p}")
+    if fylker == FYLKER:
+        return gpd.read_parquet("gs://niva-geodata/MarintNaturKart/depth_training_data.geo.parquet")
 
-        # Read original file
-        gdf = gpd.read_parquet(p)
+    county_files = []
+    for code in fylker:
+        county_files.append(
+            f"gs://niva-geodata/MarintNaturKart/Basisdata_{code}_25833_Dybdedata_Dybdeareal.geo.parquet"
+        )
 
-        # Dissolve by "minimumsdybde"
-        try:
-            gdf_dissolved = gdf.dissolve(by="minimumsdybde", as_index=False)
-        except GEOSException as e:
-            invalid_mask = ~gdf.geometry.is_valid
-            bad = gdf.loc[invalid_mask].copy()
+    gdfs = [gpd.read_parquet(path) for path in county_files]
 
-            print(f"Invalid geometries: {invalid_mask.sum()} / {len(gdf)}")
-            for i, geom in zip(bad.index, bad.geometry):
-                print(i, explain_validity(geom))
-            gdf["geometry"] = gdf.geometry.apply(make_valid)
-            print(f"TopologicalError while dissolving {p}: {e}")
-            gdf_dissolved = gdf.dissolve(by="minimumsdybde", as_index=False)
+    gdf_depth = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+    del gdfs
 
-        # Explode dissolved geometry
-        gdf_exploded = gdf_dissolved.explode(index_parts=False).reset_index(drop=True)
-
-        # Overwrite the original parquet with processed data
-        gdf_exploded.to_parquet(p)
-
-        print(f"Written exploded GeoDataFrame back to: {p}")
+    return gdf_depth
 
 
 def bunnsediment_kornstor_detalj():

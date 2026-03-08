@@ -36,7 +36,7 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
-DEM_FEATURE_NAMES = ["depth", "slope", "curvature", "is_dem"]
+DEM_FEATURE_NAMES = ["depth", "slope", "curvature"]
 SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
 
 DEPTH_NAMES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
@@ -82,30 +82,6 @@ def rasterize_marine_types(marine_vanntyper, out_shape, transform):
     return marine_type_raster
 
 
-def build(dem: xdem.DEM, marine_vanntyper: gpd.GeoDataFrame) -> np.ndarray:
-    """
-    Build features from a digital elevation model (DEM) and marine types.
-    """
-
-    depth = np.ma.filled(dem.data, np.nan).astype(np.float32)
-    slope, aspect, curvature = xdem.terrain.get_terrain_attribute(
-        dem.data,
-        resolution=dem.res,
-        attribute=["slope", "aspect", "curvature"],
-    )
-    transform, shape = dem.transform, dem.data.shape[-2:]
-
-    marine_vanntyper = marine_vanntyper.to_crs(dem.crs)
-    marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, dem.data.shape[-2:], dem.transform)
-    one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
-
-    features = np.concatenate([np.stack([depth, slope, aspect, curvature], axis=-1), one_hot_types], axis=-1)
-
-    valid_attrs = (~np.isnan(depth)) & (~np.isnan(slope)) & (~np.isnan(aspect)) & (~np.isnan(curvature))
-
-    return features.astype("float32"), valid_attrs
-
-
 def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
     """
     Rasterize the depth area from a GeoDataFrame.
@@ -138,9 +114,11 @@ def marine_vanntyper_preprocess(marine_vanntyper: gpd.GeoDataFrame):
     return marine_vanntyper
 
 
-def depth_preprocess(gdf: gpd.GeoDataFrame):
+def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool=False) -> gpd.GeoDataFrame:
 
-    gdf[["minimumsdybde", "maksimumsdybde"]] = gdf[["minimumsdybde", "maksimumsdybde"]].astype(np.float32)
+    if all(name in gdf.columns for name in SEA_MAP_NAMES) and not is_rerun:
+        print("All depth features already present, skipping preprocessing.")
+        return gdf
     gdf.dissolve(by="minimumsdybde", as_index=False)
     gdf.explode(index_parts=False).reset_index()
     gdf["avg_depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
@@ -174,7 +152,7 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     return transform, out_shape, snapped_bounds
 
 
-def build_basis_raster(
+def build(
     dem: xdem.DEM,
     gdf_basis: gpd.GeoDataFrame,
     marine_vanntyper: gpd.GeoDataFrame,
@@ -188,7 +166,7 @@ def build_basis_raster(
 
     arrays = len(DEPTH_NAMES) * [None]
 
-    for i, name in enumerate(SEA_MAP_NAMES):
+    for name in SEA_MAP_NAMES:
         print(f"Processing {name}...")
         raster = subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res)
         data = raster.data.data.astype(dtype, copy=False)
@@ -212,12 +190,11 @@ def build_basis_raster(
             del slope, curvature
         del raster, data
 
-    arrays[DEPTH_NAMES.index("is_dem")] = np.where(np.isnan(dem.data), 0, 1).astype(np.int8, copy=False)
     print(f"Processing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
-    del marine_type_raster  # Free intermediate marine raster
+    del marine_type_raster 
     print(f"Stacking feature arrays...")
     features, valid_attrs = stack(arrays, one_hot_types, valid_mask, dtype)
 
