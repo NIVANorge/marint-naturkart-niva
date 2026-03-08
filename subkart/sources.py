@@ -11,7 +11,6 @@ FYLKER = [
     "11_Rogaland",
     "15_More_og_Romsdal",
     "18_Nordland",
-    "21_Svalbard",
     "31_Ostfold",
     "32_Akershus",
     "33_Buskerud",
