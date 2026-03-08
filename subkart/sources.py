@@ -51,6 +51,7 @@ def sea_map_basisdata(fylker: list[str] = FYLKER):
     """
 
     if fylker == FYLKER:
+        print("Reading preprocessed depth training data for all fylker.")
         return gpd.read_parquet("gs://niva-geodata/MarintNaturKart/depth_training_data.geo.parquet")
 
     county_files = []
