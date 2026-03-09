@@ -9,7 +9,6 @@ import rasterio as rio
 import xdem
 from shapely import bounds
 
-import subkart
 
 MARINE_VANN_TYPE_DESC = {
     "01": "Beskyttet fjord/kyst",
