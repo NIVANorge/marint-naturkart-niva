@@ -167,7 +167,7 @@ def build(
     arrays = len(DEPTH_NAMES) * [None]
 
     for name in SEA_MAP_NAMES:
-        print(f"Processing {name}...")
+        print(f"Preparing {name}...")
         raster = subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res)
         data = raster.data.data.astype(dtype, copy=False)
         arrays[DEPTH_NAMES.index(name)] = data
@@ -190,7 +190,7 @@ def build(
             del slope, curvature
         del raster, data
 
-    print(f"Processing marine types...")
+    print(f"Preparing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
