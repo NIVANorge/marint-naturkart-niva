@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import rasterio as rio
 import xdem
+import joblib
 from matplotlib.colors import BoundaryNorm
 from shapely.errors import GEOSException
 from shapely.validation import explain_validity, make_valid
@@ -120,6 +121,10 @@ def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
 
     return gdf_exploded
 
+def load_classifier():
+    classifier_path = Path(__file__).resolve().parent.parent / "data_generated" / "classifier.joblib"
+    classifier = joblib.load(classifier_path)
+    return classifier
 
 def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25833"):
     dst_array = np.empty(out_shape, dtype=dem.data.dtype)
