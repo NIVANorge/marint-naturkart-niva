@@ -64,7 +64,6 @@ def call_wfs_service(query_xml):
     if geoserver_auth is None:
         login()
     response = requests.post(url, data=body, headers=headers, auth=geoserver_auth)
-    print(f"Response content type: {response.headers.get('Content-Type', '')}")
     # Check if the request was successful
     if response.status_code == 200 and response.headers.get("Content-Type", "").startswith("application/json"):
         return response.json()
