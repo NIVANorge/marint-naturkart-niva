@@ -6,7 +6,7 @@
             xmlns:gml="http://www.opengis.net/gml/3.2" 
             xmlns:fes="http://www.opengis.net/fes/2.0"
             xsi:schemaLocation="http://www.opengis.net/wfs/2.0 https://schemas.opengis.net/wfs/2.0/wfs.xsd">
-  <Query typeNames="kantonse:kommun_simplified">
+  <Query typeNames="no.niva.nkm:kommune_simplified">
     {{filter}}
   </Query>
 </GetFeature>
