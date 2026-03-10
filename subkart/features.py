@@ -114,7 +114,7 @@ def marine_vanntyper_preprocess(marine_vanntyper: gpd.GeoDataFrame):
     return marine_vanntyper
 
 
-def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool=False) -> gpd.GeoDataFrame:
+def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDataFrame:
 
     if all(name in gdf.columns for name in SEA_MAP_NAMES) and not is_rerun:
         print("All depth features already present, skipping preprocessing.")
@@ -194,7 +194,7 @@ def build(
     marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
-    del marine_type_raster 
+    del marine_type_raster
     print(f"Stacking feature arrays...")
     features, valid_attrs = stack(arrays, one_hot_types, valid_mask, dtype)
 

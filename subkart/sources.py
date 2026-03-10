@@ -32,7 +32,6 @@ def prepare_sea_basis_depth_data():
     """
     layer = "Dybdeareal"
 
-
     for region in FYLKER:
         gml_path = Path(f"../geonorge/Basisdata_{region}_25833_Dybdedata_GML.gml")
         output_path = Path(f"../geonorge/Basisdata_{region}_25833_Dybdedata_{layer}.geo.parquet")
