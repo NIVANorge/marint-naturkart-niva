@@ -14,3 +14,4 @@ mdir/*
 **egg-info/**
 **/*.joblib
 geonorge/*
+notebooks/*.aux.xml
