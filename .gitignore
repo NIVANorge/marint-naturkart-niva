@@ -15,3 +15,5 @@ mdir/*
 **/*.joblib
 geonorge/*
 notebooks/*.aux.xml
+notebooks/Stasjonsdata_blotbunnsbasen_points.csv
+notebooks/Stasjonsdata_bløtbunnsbasen 19.12.2025.csv
