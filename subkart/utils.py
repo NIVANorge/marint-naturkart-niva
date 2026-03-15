@@ -162,7 +162,7 @@ def to_filename(ressurstittel, romligutstrekning, ressursdato, referansesystem):
 def to_postgis(gdf, fname):
 
     if os.environ.get("NIVAGIS_CONNECTION_STR"):
-        table_name = "_".join(fname.lower().split("_")[0:3]).replace("_", "__").replace("-", "_")[:50]
+        table_name = "_".join(fname.lower().split("_")[0:3]).replace("-", "_")[:50]
         conn = create_engine(os.environ["NIVAGIS_CONNECTION_STR"])
         gdf.to_postgis(table_name, schema="naturkartmarin", con=conn, if_exists="replace")
         print(f"Table {table_name} uploaded to PostGIS.")
