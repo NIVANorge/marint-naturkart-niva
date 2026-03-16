@@ -50,13 +50,13 @@ def sea_map_basisdata(fylker: list[str] = FYLKER):
 
     if fylker == FYLKER:
         print("Reading preprocessed depth training data for all fylker.")
-        return gpd.read_parquet("gs://niva-geodata/MarintNaturKart/sjoekart_dybdedata_trening_norge.geo.parquet")
+        return gpd.read_parquet("gs://niva-geodata/MarintNaturKart/input/kartverket/sjoekart_dybdedata_trening_norge.geo.parquet")
 
     county_files = []
     for f in fylker:
         code = next((c for c in FYLKER if c.endswith(f)))
         county_files.append(
-            f"gs://niva-geodata/MarintNaturKart/Basisdata_{code}_25833_Dybdedata_Dybdeareal.geo.parquet"
+            f"gs://niva-geodata/MarintNaturKart/input/kartverket/Basisdata_{code}_25833_Dybdedata_Dybdeareal.geo.parquet"
         )
 
     gdfs = [gpd.read_parquet(path) for path in county_files]
