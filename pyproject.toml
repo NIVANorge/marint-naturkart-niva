@@ -16,18 +16,17 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "pyarrow>=23.0.0",
     "rasterio>=1.4.4",
-    "scikit-learn==1.7.1",
     "shapely>=2.1.2",
+    "scikit-learn==1.7.1",
     "sqlalchemy>=2.0.46",
     "xdem>=0.2.2",
     "xgboost (>=3.2.0,<4.0.0)",
+    "gdal (>=3.12.2,<4.0.0)",
+    "isort >=8.0.0",
+    "black >=26.3.0",
+    "nbqa >=1.9.1",
+    "ipykernel >=7.2.0"
 ]
-
-[tool.poetry.group.dev.dependencies]
-isort = "^8.0.0"
-black = {extras = ["jupyter"], version = "^26.3.0"}
-ipykernel = "^7.2.0"
-nbqa = "^1.9.1"
 
 
 [build-system]
@@ -44,3 +43,18 @@ line_length=120                # corresponds to -w  flag
 multi_line_output=3            # corresponds to -m  flag
 include_trailing_comma=true    # corresponds to -tc flag
 skip_glob = '^((?!py$).)*$'    # this makes sort all Python files
+
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+
+[tool.pixi.pypi-dependencies]
+subkart = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+scikit-learn = "==1.7.1"
+libgdal-arrow-parquet = ">=3.12.2,<4"
+libgdal-pg = ">=3.12.2,<4"
