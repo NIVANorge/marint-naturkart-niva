@@ -177,7 +177,7 @@ def to_tablename(fname: str) -> str:
     return "_".join(fname.lower().split("_")[0:3]).replace("-", "_")[:50]
 
 
-def parquet_to_postgis(parquet_path: str):
+def parquet_to_postgis(parquet_path: str, crs: str="EPSG:25833"):
     """Stream a GeoParquet file from GCS to PostGIS using GDAL."""
 
     gdal.UseExceptions()
@@ -203,6 +203,8 @@ def parquet_to_postgis(parquet_path: str):
             "SPATIAL_INDEX=GIST",
         ],
         callback=gdal.TermProgress_nocb,
+        SRC_SRS=crs,
+        DST_SRS=crs,
     )
 
     gdal.VectorTranslate(
