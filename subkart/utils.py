@@ -104,7 +104,6 @@ def plot_vanntyper(marine_vanntyper):
 
 def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
     """Dissolve geometries to fix neighboring features that are split on same depth"""
-    # Dissolve by "minimumsdybde"
     try:
         gdf_dissolved = gdf.dissolve(by=by_col, as_index=False)
     except GEOSException as e:
@@ -118,7 +117,6 @@ def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
         gdf["geometry"] = gdf.geometry.apply(make_valid)
         gdf_dissolved = gdf.dissolve(by=by_col, as_index=False)
 
-    # Explode dissolved geometry
     gdf_exploded = gdf_dissolved.explode(index_parts=False).reset_index(drop=True)
 
     return gdf_exploded
