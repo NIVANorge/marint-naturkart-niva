@@ -3,20 +3,20 @@ from pathlib import Path
 
 import geopandas as gpd
 import geoutils as gu
+import joblib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
+import psycopg2
 import rasterio as rio
 import xdem
-import joblib
 from matplotlib.colors import BoundaryNorm
+from osgeo import gdal
 from shapely.errors import GEOSException
 from shapely.validation import explain_validity, make_valid
 from sqlalchemy import create_engine
 
 import subkart
-import psycopg2
-from osgeo import gdal
 
 
 def plot_prediction_raster(raster):
@@ -122,8 +122,12 @@ def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
     return gdf_exploded
 
 
+def model_dir_path() -> Path:
+    return Path(__file__).resolve().parent.parent / "model"
+
+
 def load_classifier():
-    classifier_path = Path(__file__).resolve().parent.parent / "data_generated" / "classifier.joblib"
+    classifier_path = model_dir_path() / "classifier.joblib"
     classifier = joblib.load(classifier_path)
     return classifier
 
@@ -175,7 +179,7 @@ def to_tablename(fname: str) -> str:
     return "_".join(fname.lower().split("_")[0:3]).replace("-", "_")[:50]
 
 
-def parquet_to_postgis(parquet_path: str, crs: str="EPSG:25833"):
+def parquet_to_postgis(parquet_path: str, crs: str = "EPSG:25833"):
     """Stream a GeoParquet file from GCS to PostGIS using GDAL."""
 
     gdal.UseExceptions()
@@ -212,4 +216,3 @@ def parquet_to_postgis(parquet_path: str, crs: str="EPSG:25833"):
     )
 
     print("Table successfully loaded!")
-

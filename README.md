@@ -1,4 +1,4 @@
-# marint-naturkart-niva~~R~~
+# marint-naturkart-niva
 Code for marine nature mapping project 2025-2026
 
 ## Getting started
