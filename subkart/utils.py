@@ -7,10 +7,8 @@ import joblib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
-import psycopg2
 import rasterio as rio
 import xdem
-from matplotlib.colors import BoundaryNorm
 from osgeo import gdal
 from shapely.errors import GEOSException
 from shapely.validation import explain_validity, make_valid
@@ -100,6 +98,16 @@ def plot_vanntyper(marine_vanntyper):
     )
 
     ax.set_title("marine_vanntyper")
+
+def inspect_arrays(arrays):
+    """Plot feature arrays for inspection."""
+
+    for i, name in enumerate(subkart.features.DEPTH_NAMES):
+        plt.figure(figsize=(8, 6))
+        plt.imshow(arrays[i], cmap="viridis")
+        plt.title(f"Array {name}")
+        plt.colorbar()
+        plt.show()
 
 
 def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):

@@ -154,16 +154,6 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     out_shape = (height, width)
     return transform, out_shape, snapped_bounds
 
-def inspect_arrays(arrays):
-    """Save each array to a GeoTIFF for inspection."""
-    import matplotlib.pyplot as plt
-
-    for i, name in enumerate(DEPTH_NAMES):
-        plt.figure(figsize=(8, 6))
-        plt.imshow(arrays[i], cmap="viridis")
-        plt.title(f"Array {name}")
-        plt.colorbar()
-        plt.show()
 
 def build(
     dem: xdem.DEM,
@@ -208,7 +198,7 @@ def build(
         del raster, data
 
     if inspect:
-        inspect_arrays(arrays)
+        subkart.utils.inspect_arrays(arrays)
     print(f"Preparing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_sea_map.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
