@@ -10,6 +10,8 @@ import xdem
 from shapely import bounds
 
 import subkart
+import rasterio
+from rasterio.transform import from_origin
 
 MARINE_VANN_TYPE_DESC = {
     "01": "Beskyttet fjord/kyst",
@@ -36,7 +38,7 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
-DEM_FEATURE_NAMES = ["dem_depth", "dem_slope", "dem_curvature"]
+DEM_FEATURE_NAMES = ["dem_depth", "dem_slope", "dem_curvature", "is_dem"]
 SEA_MAP_NAMES = ["sea_avg_depth", "sea_avg_slope", "sea_compactness", "sea_convexity", "sea_area"]
 
 DEPTH_NAMES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
@@ -152,6 +154,16 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     out_shape = (height, width)
     return transform, out_shape, snapped_bounds
 
+def inspect_arrays(arrays):
+    """Save each array to a GeoTIFF for inspection."""
+    import matplotlib.pyplot as plt
+
+    for i, name in enumerate(DEPTH_NAMES):
+        plt.figure(figsize=(8, 6))
+        plt.imshow(arrays[i], cmap="viridis")
+        plt.title(f"Array {name}")
+        plt.colorbar()
+        plt.show()
 
 def build(
     dem: xdem.DEM,
@@ -160,6 +172,7 @@ def build(
     valid_mask: np.ndarray,
     res: int = 50,
     dtype=np.float32,
+    inspect: bool = False
 ) -> tuple:
     transform, out_shape, bounds = to_raster_shapes(gdf_sea_map, res)
 
@@ -172,11 +185,13 @@ def build(
         raster = subkart.features.rasterize_area(vec_basis, gdf_sea_map[name], bounds, res)
         data = raster.data.data.astype(dtype, copy=False)
         arrays[DEPTH_NAMES.index(name)] = data
+
         if name == "sea_avg_depth":
             depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
             
             depth_filled = np.where(np.isnan(depth), -data, depth)
             arrays[DEPTH_NAMES.index("dem_depth")] = depth_filled.astype(dtype, copy=False)
+            arrays[DEPTH_NAMES.index("is_dem")] = np.isfinite(depth).astype(dtype, copy=False)
 
         elif name == "sea_avg_slope":
             slope, curvature = xdem.terrain.get_terrain_attribute(
@@ -192,6 +207,8 @@ def build(
             del slope, curvature
         del raster, data
 
+    if inspect:
+        inspect_arrays(arrays)
     print(f"Preparing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_sea_map.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
