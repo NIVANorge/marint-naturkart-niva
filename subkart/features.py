@@ -54,10 +54,8 @@ def marine_type_map():
 
 def one_hot_encode_marine_types(marine_type_raster):
     num_classes = len(VANNTYPER_COMBINED)
-    # Use bool to reduce memory, convert to uint8 at the end if needed
     one_hot_types = np.zeros(marine_type_raster.shape + (num_classes,), dtype=bool)
     valid_ids = marine_type_raster >= 0  # exclude nodata (-1)
-    # Use advanced indexing for efficiency
     idx = np.where(valid_ids)
     class_ids = marine_type_raster[idx]
     one_hot_types[idx + (class_ids,)] = True
