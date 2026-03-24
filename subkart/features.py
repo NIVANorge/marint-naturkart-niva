@@ -198,7 +198,7 @@ def build(
         del raster, data
 
     if inspect:
-        subkart.utils.inspect_arrays(arrays)
+        subkart.plot.inspect_arrays(arrays)
     print(f"Preparing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_sea_map.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)

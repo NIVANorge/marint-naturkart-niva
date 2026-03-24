@@ -1,3 +1,3 @@
-from subkart import features, labelling, sources, utils
+from subkart import features, labelling, plot, sources, utils
 
-__all__ = ["features", "utils", "labelling", "sources"]
+__all__ = ["features", "utils", "labelling", "sources", "plot"]
