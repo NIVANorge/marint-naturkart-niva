@@ -36,8 +36,8 @@ VANNTYPER_COMBINED = {
     # "særegen": ["09"], moved to beskyttet
 }
 
-DEM_FEATURE_NAMES = ["depth", "slope", "curvature"]
-SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity", "area"]
+DEM_FEATURE_NAMES = ["dem_depth", "dem_slope", "dem_curvature"]
+SEA_MAP_NAMES = ["sea_avg_depth", "sea_avg_slope", "sea_compactness", "sea_convexity", "sea_area"]
 
 DEPTH_NAMES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
 NAMES = DEPTH_NAMES + list(VANNTYPER_COMBINED.keys())
@@ -121,15 +121,15 @@ def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDa
         return gdf
     gdf.dissolve(by="minimumsdybde", as_index=False)
     gdf.explode(index_parts=False).reset_index()
-    gdf["avg_depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
+    gdf["sea_avg_depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
     # Effective Width (or hydraulic mean width)
-    gdf["avg_slope"] = np.degrees(
+    gdf["sea_avg_slope"] = np.degrees(
         np.arctan((gdf["maksimumsdybde"] - gdf["minimumsdybde"]) / (4 * gdf.geometry.area / gdf.geometry.length))
     )
 
-    gdf["compactness"] = 4 * np.pi * gdf.area / (gdf.length**2)
-    gdf["convexity"] = gdf.area / gdf.geometry.convex_hull.area
-    gdf["area"] = gdf.geometry.area
+    gdf["sea_compactness"] = 4 * np.pi * gdf.area / (gdf.length**2)
+    gdf["sea_convexity"] = gdf.area / gdf.geometry.convex_hull.area
+    gdf["sea_area"] = gdf.geometry.area
 
     return gdf
 
@@ -166,26 +166,27 @@ def build(
     vec_basis = gu.Vector(gdf_sea_map)
 
     arrays = len(DEPTH_NAMES) * [None]
-
+    
     for name in SEA_MAP_NAMES:
         print(f"Preparing {name}...")
         raster = subkart.features.rasterize_area(vec_basis, gdf_sea_map[name], bounds, res)
         data = raster.data.data.astype(dtype, copy=False)
         arrays[DEPTH_NAMES.index(name)] = data
-        if name == "avg_depth":
+        if name == "sea_avg_depth":
             depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
+            
             depth_filled = np.where(np.isnan(depth), -data, depth)
-            arrays[DEPTH_NAMES.index("depth")] = depth_filled.astype(dtype, copy=False)
-            del depth, depth_filled
-        elif name == "avg_slope":
+            arrays[DEPTH_NAMES.index("dem_depth")] = depth_filled.astype(dtype, copy=False)
+
+        elif name == "sea_avg_slope":
             slope, curvature = xdem.terrain.get_terrain_attribute(
                 dem.data,
                 resolution=res,
                 attribute=["slope", "curvature"],
             )
             slope_filled = np.where(np.isnan(slope), data, slope)
-            arrays[DEPTH_NAMES.index("slope")] = slope_filled.astype(dtype, copy=False)
-            arrays[DEPTH_NAMES.index("curvature")] = np.nan_to_num(curvature, nan=0.0).astype(
+            arrays[DEPTH_NAMES.index("dem_slope")] = slope_filled.astype(dtype, copy=False)
+            arrays[DEPTH_NAMES.index("dem_curvature")] = np.nan_to_num(curvature, nan=0.0).astype(
                 dtype, copy=False
             )  # Set to flat
             del slope, curvature

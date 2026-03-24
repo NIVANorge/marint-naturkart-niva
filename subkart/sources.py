@@ -3,6 +3,8 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+import xdem
+import rasterio as rio
 
 import subkart
 
@@ -39,6 +41,11 @@ def prepare_sea_basis_depth_data():
         gdf = subkart.utils.dissolve_geometries(gdf, by_col="minimumsdybde")
         gdf.to_parquet(output_path, compression="snappy")
         print(f"Written GeoParquet to {output_path}")
+
+
+def dem_data():
+    dem = xdem.DEM(rio.open("https://storage.googleapis.com/niva-geodata/MarintNaturKart/input/kartverket/dem50_norge.tif"))
+    return dem
 
 
 def sea_map_basisdata(fylker: list[str] = FYLKER):

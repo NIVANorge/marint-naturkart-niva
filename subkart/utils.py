@@ -134,6 +134,7 @@ def load_classifier():
 
 def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25833"):
     dst_array = np.empty(out_shape, dtype=dem.data.dtype)
+
     rio.warp.reproject(
         source=dem.data,
         destination=dst_array,
@@ -141,10 +142,13 @@ def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25
         src_crs=dem.crs,
         dst_transform=transform,
         dst_crs=crs,
-        resampling=rio.warp.Resampling.bilinear,  # or nearest, cubic, cubic_spline, etc.
+        src_nodata=dem.nodata,
+        dst_nodata=dem.nodata,
+        resampling=rio.warp.Resampling.bilinear,
     )
 
-    return xdem.DEM.from_array(dst_array, transform=transform, crs=crs)
+
+    return xdem.DEM.from_array(dst_array, transform=transform, crs=crs, nodata=dem.nodata)
 
 
 def to_geoparquet(input_gml_path: Path, layer_name: str, output_path: Path):
