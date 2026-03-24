@@ -37,7 +37,7 @@ VANNTYPER_COMBINED = {
 }
 
 DEM_FEATURE_NAMES = ["depth", "slope", "curvature"]
-SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity"]
+SEA_MAP_NAMES = ["avg_depth", "avg_slope", "compactness", "convexity", "area"]
 
 DEPTH_NAMES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
 NAMES = DEPTH_NAMES + list(VANNTYPER_COMBINED.keys())
@@ -129,6 +129,7 @@ def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDa
 
     gdf["compactness"] = 4 * np.pi * gdf.area / (gdf.length**2)
     gdf["convexity"] = gdf.area / gdf.geometry.convex_hull.area
+    gdf["area"] = gdf.geometry.area
 
     return gdf
 
@@ -154,26 +155,26 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
 
 def build(
     dem: xdem.DEM,
-    gdf_basis: gpd.GeoDataFrame,
+    gdf_sea_map: gpd.GeoDataFrame,
     marine_vanntyper: gpd.GeoDataFrame,
     valid_mask: np.ndarray,
     res: int = 50,
     dtype=np.float32,
 ) -> tuple:
-    transform, out_shape, bounds = to_raster_shapes(gdf_basis, res)
+    transform, out_shape, bounds = to_raster_shapes(gdf_sea_map, res)
 
-    vec_basis = gu.Vector(gdf_basis)
+    vec_basis = gu.Vector(gdf_sea_map)
 
     arrays = len(DEPTH_NAMES) * [None]
 
     for name in SEA_MAP_NAMES:
         print(f"Preparing {name}...")
-        raster = subkart.features.rasterize_area(vec_basis, gdf_basis[name], bounds, res)
+        raster = subkart.features.rasterize_area(vec_basis, gdf_sea_map[name], bounds, res)
         data = raster.data.data.astype(dtype, copy=False)
         arrays[DEPTH_NAMES.index(name)] = data
         if name == "avg_depth":
             depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
-            depth_filled = np.where(np.isnan(depth), data, depth)
+            depth_filled = np.where(np.isnan(depth), -data, depth)
             arrays[DEPTH_NAMES.index("depth")] = depth_filled.astype(dtype, copy=False)
             del depth, depth_filled
         elif name == "avg_slope":
@@ -191,7 +192,7 @@ def build(
         del raster, data
 
     print(f"Preparing marine types...")
-    marine_vanntyper = marine_vanntyper.to_crs(gdf_basis.crs)
+    marine_vanntyper = marine_vanntyper.to_crs(gdf_sea_map.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
     one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
     del marine_type_raster
