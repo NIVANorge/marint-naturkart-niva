@@ -14,7 +14,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassif
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
-from sklearn.model_selection import RandomizedSearchCV, train_test_split
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.utils.class_weight import compute_class_weight
 from xgboost import XGBClassifier
@@ -119,6 +119,8 @@ def optimize_xgboost_hyperparameters(
 ):
     """
     Find optimal hyperparameters for XGBoost classifier using randomized search.
+    
+    Uses stratified K-fold cross-validation and early stopping to prevent overfitting.
     """
     
     # Load existing best parameters if available
@@ -133,63 +135,85 @@ def optimize_xgboost_hyperparameters(
                 base_params = cv_results["XGBClassifier"]["params"]
                 print(f"Starting search around existing parameters: {base_params}")
     
-    # Define search space
+    # Define search space with stronger regularization
     if base_params is not None:
         # Search around existing parameters
         param_distributions = _create_param_search_around_base(base_params, search_width)
     else:
-        # Use default wide search space
+        # Use default wide search space with stronger regularization
         param_distributions = {
             "n_estimators": randint(100, 1000),
-            "max_depth": randint(3, 15),
+            "max_depth": randint(3, 12),  # Reduced max depth to prevent overfitting
             "learning_rate": uniform(0.01, 0.3),
-            "subsample": uniform(0.5, 0.5),  # 0.5 to 1.0
-            "colsample_bytree": uniform(0.5, 0.5),  # 0.5 to 1.0
+            "subsample": uniform(0.6, 0.4),  # 0.6 to 1.0 (higher minimum)
+            "colsample_bytree": uniform(0.6, 0.4),  # 0.6 to 1.0 (higher minimum)
             "min_child_weight": randint(1, 10),
             "gamma": uniform(0, 0.5),
-            "reg_alpha": uniform(0, 1.0),
-            "reg_lambda": uniform(0, 2.0),
+            "reg_alpha": uniform(0, 2.0),  # Increased L1 regularization
+            "reg_lambda": uniform(1.0, 3.0),  # Increased L2 regularization (1.0 to 4.0)
         }
         print("No existing parameters found. Using wide search space.")
     
-    # Create base XGBoost classifier
+    # Create base XGBoost classifier with early stopping parameters
     xgb_base = XGBClassifier(
         num_class=len(classes),
         random_state=random_state,
         n_jobs=n_jobs if n_jobs != -1 else 2,
         tree_method="hist",
         eval_metric="mlogloss",
+        early_stopping_rounds=50,  # Stop if no improvement for 50 rounds
     )
     
-    # Perform randomized search
-    print(f"\nStarting randomized search with {n_iter} iterations and {cv_folds}-fold CV...")
+    # Use stratified K-fold to maintain class distribution
+    cv_strategy = StratifiedKFold(
+        n_splits=cv_folds,
+        shuffle=True,
+        random_state=random_state
+    )
+    
+    # Perform randomized search with stratified CV
+    print(f"\nStarting randomized search with {n_iter} iterations and {cv_folds}-fold stratified CV...")
     random_search = RandomizedSearchCV(
         xgb_base,
         param_distributions=param_distributions,
         n_iter=n_iter,
-        cv=cv_folds,
+        cv=cv_strategy,  # Use stratified K-fold
         verbose=verbose,
         random_state=random_state,
         n_jobs=n_jobs,
         scoring="accuracy",
+        return_train_score=True,  # Track train scores to detect overfitting
     )
     
-    random_search.fit(X_train, y_train)
+    # Fit with validation set for early stopping
+    random_search.fit(
+        X_train, 
+        y_train,
+        eval_set=[(X_val, y_val)],  # Use validation set for early stopping
+        verbose=False
+    )
     
-    # Get best model
+    # Get best model (already fitted during CV)
     best_classifier = random_search.best_estimator_
     
-    # Train on full training set and evaluate
-    best_classifier.fit(X_train, y_train)
+    # Evaluate on train and validation sets
     train_score = best_classifier.score(X_train, y_train)
     val_score = best_classifier.score(X_val, y_val)
+    
+    # Calculate overfitting gap
+    cv_train_score = random_search.cv_results_['mean_train_score'][random_search.best_index_]
+    overfitting_gap = train_score - val_score
     
     print(f"\n{'='*60}")
     print(f"Optimization complete!")
     print(f"{'='*60}")
     print(f"Best CV score: {random_search.best_score_:.4f}")
+    print(f"CV train score: {cv_train_score:.4f}")
     print(f"Train accuracy: {train_score:.4f}")
     print(f"Validation accuracy: {val_score:.4f}")
+    print(f"Overfitting gap (train - val): {overfitting_gap:.4f}")
+    if overfitting_gap > 0.1:
+        print("⚠️  Warning: Large overfitting gap detected. Consider more regularization.")
     print(f"\nBest parameters:")
     for param, value in random_search.best_params_.items():
         print(f"  {param}: {value}")
@@ -197,8 +221,10 @@ def optimize_xgboost_hyperparameters(
     # Prepare results dictionary
     search_results = {
         "best_score": float(random_search.best_score_),
+        "cv_train_score": float(cv_train_score),
         "train_score": float(train_score),
         "val_score": float(val_score),
+        "overfitting_gap": float(overfitting_gap),
         "best_params": random_search.best_params_,
         "cv_results": random_search.cv_results_,
         "base_params": base_params,
@@ -267,16 +293,37 @@ def _create_param_search_around_base(base_params: dict, search_width: float = 0.
         param_distributions["colsample_bytree"] = uniform(low, 2 * width)
     
     # Add additional parameters with default ranges if not in base_params
+    # Use stronger regularization by default to prevent overfitting
     if "min_child_weight" not in base_params:
         param_distributions["min_child_weight"] = randint(1, 10)
+    else:
+        center = base_params["min_child_weight"]
+        low = max(1, int(center * (1 - search_width)))
+        high = int(center * (1 + search_width))
+        param_distributions["min_child_weight"] = randint(low, high + 1)
     
     if "gamma" not in base_params:
         param_distributions["gamma"] = uniform(0, 0.5)
+    else:
+        center = base_params["gamma"]
+        width = center * search_width if center > 0 else 0.1
+        low = max(0, center - width)
+        param_distributions["gamma"] = uniform(low, 2 * width)
     
     if "reg_alpha" not in base_params:
-        param_distributions["reg_alpha"] = uniform(0, 1.0)
+        param_distributions["reg_alpha"] = uniform(0, 2.0)  # Increased default
+    else:
+        center = base_params["reg_alpha"]
+        width = center * search_width if center > 0 else 0.5
+        low = max(0, center - width)
+        param_distributions["reg_alpha"] = uniform(low, 2 * width)
     
     if "reg_lambda" not in base_params:
-        param_distributions["reg_lambda"] = uniform(0, 2.0)
+        param_distributions["reg_lambda"] = uniform(1.0, 3.0)  # Increased default (1.0 to 4.0)
+    else:
+        center = base_params["reg_lambda"]
+        width = center * search_width if center > 0 else 0.5
+        low = max(0, center - width)
+        param_distributions["reg_lambda"] = uniform(low, 2 * width)
     
     return param_distributions
