@@ -13,6 +13,20 @@ from sqlalchemy import create_engine
 
 import subkart
 
+def to_serializable(obj):
+    """Convert numpy arrays and other non-serializable types to JSON-serializable formats."""
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, dict):
+        return {key: to_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_serializable(item) for item in obj]
+    else:
+        return obj
 
 def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
     """Dissolve geometries to fix neighboring features that are split on same depth"""

@@ -21,6 +21,7 @@ from xgboost import XGBClassifier
 
 import subkart
 
+
 def random_search(X_train, y_train, X_val, y_val, classes, class_weights):
     search_spaces = [
         {
@@ -202,9 +203,10 @@ def optimize_xgboost_hyperparameters(
         "cv_results": random_search.cv_results_,
         "base_params": base_params,
     }
-    # Dump summary to JSON
+    # Dump summary to JSON (convert numpy arrays to lists)
+    serializable_results = subkart.utils.to_serializable(search_results)
     with open(subkart.utils.model_dir_path() / "xgboost_results.json", "w", encoding="utf-8") as f:
-        json.dump(search_results, f, indent=2)
+        json.dump(serializable_results, f, indent=2)
 
     return best_classifier, search_results
 

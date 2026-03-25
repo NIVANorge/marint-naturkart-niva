@@ -46,8 +46,11 @@ def test_random_search_runs_and_saves_output(mock_model_dir, tmp_path):
         assert "params" in saved_data[model_name]
 
 
-def test_optimize_xgboost_hyperparameters_without_base_params(tmp_path):
+@patch("subkart.utils.model_dir_path")
+def test_optimize_xgboost_hyperparameters_without_base_params(mock_model_dir, tmp_path):
     """Test optimization function when no base parameters exist"""
+    mock_model_dir.return_value = tmp_path
+    
     X, y = make_classification(
         n_samples=100,
         n_features=5,
@@ -100,6 +103,10 @@ def test_optimize_xgboost_hyperparameters_without_base_params(tmp_path):
     assert "n_estimators" in results["best_params"]
     assert "max_depth" in results["best_params"]
     assert "learning_rate" in results["best_params"]
+    
+    # Check that xgboost_results.json was written to tmp location
+    xgboost_results_path = tmp_path / "xgboost_results.json"
+    assert xgboost_results_path.exists(), "xgboost_results.json was not written to tmp location"
 
 
 @patch("subkart.utils.model_dir_path")
@@ -173,10 +180,17 @@ def test_optimize_xgboost_hyperparameters_with_base_params(mock_model_dir, tmp_p
     assert 0 <= results["best_score"] <= 1
     assert 0 <= results["train_score"] <= 1
     assert 0 <= results["val_score"] <= 1
+    
+    # Check that xgboost_results.json was written to tmp location
+    xgboost_results_path = tmp_path / "xgboost_results.json"
+    assert xgboost_results_path.exists(), "xgboost_results.json was not written to tmp location"
 
 
-def test_optimize_xgboost_hyperparameters_custom_search_width(tmp_path):
+@patch("subkart.utils.model_dir_path")
+def test_optimize_xgboost_hyperparameters_custom_search_width(mock_model_dir, tmp_path):
     """Test that custom search_width parameter is respected"""
+    mock_model_dir.return_value = tmp_path
+    
     X, y = make_classification(
         n_samples=100,
         n_features=5,
