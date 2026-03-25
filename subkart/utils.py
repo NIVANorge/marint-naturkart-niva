@@ -13,6 +13,7 @@ from sqlalchemy import create_engine
 
 import subkart
 
+
 def to_serializable(obj):
     """Convert numpy arrays and other non-serializable types to JSON-serializable formats."""
     if isinstance(obj, np.ndarray):
@@ -73,6 +74,9 @@ def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25
         resampling=rio.warp.Resampling.bilinear,
     )
 
+    # Mask nodata values to avoid warning from geoutils
+    if dem.nodata is not None:
+        dst_array = np.ma.masked_equal(dst_array, dem.nodata)
 
     return xdem.DEM.from_array(dst_array, transform=transform, crs=crs, nodata=dem.nodata)
 

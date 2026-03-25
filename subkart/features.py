@@ -39,7 +39,7 @@ VANNTYPER_COMBINED = {
 }
 
 DEM_FEATURE_NAMES = ["dem_depth", "dem_slope", "dem_curvature", "is_dem"]
-SEA_MAP_NAMES = ["sea_avg_depth", "sea_avg_slope", "sea_compactness", "sea_convexity", "sea_area"]
+SEA_MAP_NAMES = ["sea_avg_depth", "sea_avg_slope", "sea_compactness", "sea_convexity"]
 
 DEPTH_NAMES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
 NAMES = DEPTH_NAMES + list(VANNTYPER_COMBINED.keys())
@@ -197,6 +197,7 @@ def build(
 
     if inspect:
         subkart.plot.inspect_arrays(arrays)
+
     print(f"Preparing marine types...")
     marine_vanntyper = marine_vanntyper.to_crs(gdf_sea_map.crs)
     marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
