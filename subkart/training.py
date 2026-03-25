@@ -1,22 +1,10 @@
 import json
 from pathlib import Path
 
-import geopandas as gpd
-import geoutils as gu
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import rasterio as rio
-import xdem
-from joblib import dump
 from scipy.stats import randint, uniform
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
-from sklearn.inspection import permutation_importance
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.utils.class_weight import compute_class_weight
 from xgboost import XGBClassifier
 
 import subkart
@@ -253,7 +241,6 @@ def _create_param_search_around_base(base_params: dict, search_width: float = 0.
     param_distributions : dict
         Dictionary of parameter distributions for RandomizedSearchCV
     """
-    from scipy.stats import randint, uniform
     
     param_distributions = {}
     
