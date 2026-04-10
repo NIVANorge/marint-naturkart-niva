@@ -25,6 +25,13 @@ FYLKER = [
     "56_Finnmark",
 ]
 
+REGIONS = {
+    "vestland": ["More_og_Romsdal", "Vestland", "Rogaland"],
+    "sor-ost": ["Agder", "Telemark", "Vestfold", "Ostfold", "Akershus", "Buskerud", "Oslo"],
+    "midt": ["Trondelag", "Nordland"],
+    "nord": ["Troms", "Finnmark"],
+}
+
 
 def prepare_sea_basis_depth_data():
     """Prepare basis depth data for processing.
@@ -44,7 +51,9 @@ def prepare_sea_basis_depth_data():
 
 
 def dem_data():
-    dem = xdem.DEM(rio.open("https://storage.googleapis.com/niva-geodata/MarintNaturKart/input/kartverket/dem50_norge.tif"))
+    dem = xdem.DEM(
+        rio.open("https://storage.googleapis.com/niva-geodata/MarintNaturKart/input/kartverket/dem50_norge.tif")
+    )
     return dem
 
 

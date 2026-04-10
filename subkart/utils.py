@@ -74,11 +74,30 @@ def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25
         resampling=rio.warp.Resampling.bilinear,
     )
 
-    # Mask nodata values to avoid warning from geoutils
     if dem.nodata is not None:
         dst_array = np.ma.masked_equal(dst_array, dem.nodata)
 
     return xdem.DEM.from_array(dst_array, transform=transform, crs=crs, nodata=dem.nodata)
+
+
+def merge_rasters(file_list: list[Path], fname: Path, nodata):
+    """Merge multiple raster files into one using GDAL."""
+
+    gdal.UseExceptions()
+    src_ds_list = [gdal.Open(f, gdal.GA_ReadOnly) for f in file_list]
+
+    vrt_options = gdal.BuildVRTOptions(
+        srcNodata=nodata,
+        VRTNodata=nodata,
+    )
+    vrt_ds = gdal.BuildVRT("/vsimem/merged.vrt", src_ds_list, options=vrt_options)
+
+    translate_options = gdal.TranslateOptions(
+        format="GTiff",
+        creationOptions=["COMPRESS=DEFLATE", "TILED=YES"],
+        noData=nodata,
+    )
+    gdal.Translate(fname, vrt_ds, options=translate_options)
 
 
 def to_geoparquet(input_gml_path: Path, layer_name: str, output_path: Path):
@@ -111,6 +130,40 @@ def to_postgis(gdf, fname):
 def to_tablename(fname: str) -> str:
     """Convert a filename to a table name."""
     return "_".join(fname.lower().split("_")[0:3]).replace("-", "_")[:50]
+
+
+def save_feature_rasters(
+    prefix: str,
+    X: np.ndarray,
+    valid_mask: np.ndarray,
+    transform: tuple,
+    out_shape: tuple,
+    nodata: float,
+    crs: str = "EPSG:25833",
+):
+    """
+    Save each feature array as a separate GeoTIFF file.
+    """
+    out_dir = Path("features")
+    out_dir.mkdir(exist_ok=True)
+
+    for i, feature_name in enumerate(subkart.features.DEPTH_NAMES):
+        band = np.full(out_shape, nodata, dtype=np.float32)
+        band[valid_mask] = X[:, i]
+        out_path = Path(f"features/{prefix}_{feature_name}.tif")
+        with rio.open(
+            out_path,
+            "w",
+            driver="GTiff",
+            height=out_shape[0],
+            width=out_shape[1],
+            count=1,
+            dtype=np.float32,
+            crs=crs,
+            transform=transform,
+            nodata=nodata,
+        ) as dst:
+            dst.write(band, 1)
 
 
 def parquet_to_postgis(parquet_path: str, crs: str = "EPSG:25833"):
