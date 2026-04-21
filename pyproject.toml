@@ -53,7 +53,10 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 subkart = { path = ".", editable = true }
 
 [tool.pixi.tasks]
+labelling = "papermill notebooks/01_labelling.ipynb notebooks/01_labelling.ipynb"
 modelling = "papermill notebooks/02_modelling.ipynb notebooks/02_modelling.ipynb"
+predict = "papermill notebooks/03_predict.ipynb notebooks/03_predict.ipynb"
+validate = "papermill notebooks/04_validate.ipynb notebooks/04_validate.ipynb"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
