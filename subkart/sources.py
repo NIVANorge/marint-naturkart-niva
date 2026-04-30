@@ -138,11 +138,20 @@ def prepare_mv_aoi():
 
     Combines marine vanntyper and missing area geometries into a single AOI.
     """
+    import shapely
+
     crs = "EPSG:25833"
-    mv = subkart.sources.marine_vanntyper().to_crs(crs)
-    missing_area = gpd.read_parquet("gs://niva-geodata/MarintNaturKart/aux/aoi_missing.geo.parquet").to_crs(crs)
 
-    df = pd.concat([mv.geometry, missing_area.geometry])
+    geoms = np.concatenate([
+        subkart.sources.marine_vanntyper().to_crs(crs).geometry.values,
+        gpd.read_parquet("gs://niva-geodata/MarintNaturKart/aux/aoi_missing.geo.parquet").to_crs(crs).geometry.values,
+    ])
+    geoms = shapely.make_valid(geoms)
 
-    gpd.GeoDataFrame(geometry=df, crs=crs).to_parquet("aoi_from_marine_vanntyper.geo.parquet")
+    gpd.GeoDataFrame(geometry=geoms, crs=crs).to_parquet("aoi_from_marine_vanntyper.geo.parquet")
+
+    union_geom = union_all(geoms)
+    del geoms
+
+    gpd.GeoDataFrame(geometry=[union_geom], crs=crs).to_parquet("aoi_from_marine_vanntyper_union.geo.parquet")
 
