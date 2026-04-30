@@ -14,10 +14,10 @@ mdir/*
 **egg-info/**
 **/*.joblib
 geonorge/*
-notebooks/data/*
+notebooks/data/
 notebooks/**/*.aux.xml
-notebooks/Stasjonsdata_blotbunnsbasen_points.csv
-notebooks/Stasjonsdata_bløtbunnsbasen 19.12.2025.csv
+niva/**/*.aux.xml
+
 # pixi environments
 .pixi/*
 !.pixi/config.toml
