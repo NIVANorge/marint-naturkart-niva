@@ -6,16 +6,12 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import union_all
 import xdem
+import shapely
 import rasterio as rio
-from osgeo import gdal
-from osgeo_utils import gdal_calc
-from scipy.ndimage import distance_transform_edt
 from shapely import union_all
-from tqdm import tqdm
 
 import subkart
 import geoutils as gu
-import requests
 
 FYLKER = [
     "03_Oslo",
@@ -104,6 +100,39 @@ def prepare_sea_basis_depth_data():
         print(f"Written GeoParquet to {output_path}")
 
 
+def prepare_land_data():
+    """Prepare basis depth data for processing.
+
+    Data downloaded from Geonorge, at https://kartkatalog.geonorge.no/metadata/sjoekart-dybdedata/2751aacf-5472-4850-a208-3532a51c529a?search=basisdata%20sj%C3%B8
+    This data is used as a basis for further analysis and modeling and output saved to geoparquet format.
+    """
+    layer = "Landareal"
+
+    crs = "EPSG:25833"
+    
+    gdf_list = []
+    for region in FYLKER:
+        gml_path = Path(__file__).resolve().parent.parent / f"geonorge/Basisdata_{region}_25833_Dybdedata_GML.gml"
+        gdf = gpd.read_file(gml_path, layer=layer)
+        gdf_list.append(gdf.to_crs(crs).geometry.values)
+    
+    geoms = np.concatenate(gdf_list)
+    geoms = shapely.make_valid(geoms)
+    
+    output_path = Path(__file__).resolve().parent.parent / "geonorge/Basisdata_Landareal.gpkg"
+    
+    gdf = gpd.GeoDataFrame(geometry=geoms, crs=crs)
+    gdf.to_file(output_path, layer="landareal", driver="GPKG")
+    
+    union_geom = union_all(geoms)
+    del geoms
+    
+    gdf_union = gpd.GeoDataFrame(geometry=[union_geom], crs=crs)
+    gdf_union.to_file(output_path, layer="landareal_union", driver="GPKG")
+    
+    print(f"Written GeoPackage to {output_path}")
+
+
 def prepare_bunnsediment_kornstor_detalj():
     """Prepare bunnsediment kornstor detalj data for processing.
 
@@ -138,7 +167,7 @@ def prepare_mv_aoi():
 
     Combines marine vanntyper and missing area geometries into a single AOI.
     """
-    import shapely
+
 
     crs = "EPSG:25833"
 
