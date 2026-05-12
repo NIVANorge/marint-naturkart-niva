@@ -65,7 +65,7 @@ def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25
     rio.warp.reproject(
         source=dem.data,
         destination=dst_array,
-        src_transform=transform,
+        src_transform=dem.transform,
         src_crs=dem.crs,
         dst_transform=transform,
         dst_crs=crs,
