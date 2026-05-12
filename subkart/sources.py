@@ -81,6 +81,14 @@ def marine_vanntyper():
     return gpd.read_parquet("gs://niva-geodata/MarintNaturKart/input/mdir/NyTypologi2022.geo.parquet")
 
 
+def bolge_exposure():
+    """Read bolge exposure data
+
+    Read bolge exposure raster from gs://niva-geodata/MarintNaturKart/input/niva/EswmRasterFill.tif
+    """
+    return gu.Raster("gs://niva-geodata/MarintNaturKart/input/niva/EswmRasterFill.tif")
+
+
 def prepare_sea_basis_depth_data():
     """Prepare basis depth data for processing.
 

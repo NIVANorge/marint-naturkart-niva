@@ -1,85 +1,16 @@
-import enum
-from pyexpat import features
-from unicodedata import name
-
 import geopandas as gpd
 import geoutils as gu
 import numpy as np
 import rasterio as rio
 import xdem
-from shapely import bounds
 
 import subkart
-import rasterio
-from rasterio.transform import from_origin
-
-MARINE_VANN_TYPE_DESC = {
-    "01": "Beskyttet fjord/kyst",
-    "01a": "Beskyttet fjord/kyst med oksygenfattig bunnvann",
-    "02": "Beskyttet ferskvannspåvirket fjord/kyst",
-    "02a": "Beskyttet ferskvannspåvirket fjord med oksygenfattig bunnvann",
-    "03": "Sterkt ferskvannspåvirket fjord",
-    "03a": "Sterkt ferskvannspåvirket fjord med oksygenfattig bunnvann",
-    "04": "Moderat eksponert fjord/kyst",
-    "05": "Moderat eksponert ferskvannspåvirket fjord/kyst",
-    "06": "Bølgeeksponert kyst",
-    "07": "Bølgeeksponert ferskvannspåvirket kyst",
-    "08": "Strømrike sund",
-    "09": "Særegen vannforekomst",
-}
-
-
-VANNTYPER_COMBINED = {
-    "beskyttet": ["01", "01a", "02", "02a", "03", "03a", "09"],
-    # "sterkt_ferskvannspåvirket": [, ], moved to beskyttet
-    "moderat_eksponert": ["04", "05", "08"],
-    "bølgeeksponert": ["06", "07"],
-    # "strømrike": ["08"], moved to moderat_eksponert
-    # "særegen": ["09"], moved to beskyttet
-}
 
 DEM_FEATURE_NAMES = ["dem_depth", "dem_slope", "dem_curvature", "is_dem"]
 SEA_MAP_NAMES = ["sea_avg_depth", "sea_avg_slope", "sea_compactness", "sea_convexity"]
 
 DEPTH_NAMES = DEM_FEATURE_NAMES + SEA_MAP_NAMES
-NAMES = DEPTH_NAMES + list(VANNTYPER_COMBINED.keys())
-
-
-def marine_type_map():
-    types = VANNTYPER_COMBINED.keys()
-    type_id_map = {t: i for i, t in enumerate(types)}
-    id_type_map = {i: t for t, i in type_id_map.items()}
-    return types, id_type_map, type_id_map
-
-
-def one_hot_encode_marine_types(marine_type_raster):
-    num_classes = len(VANNTYPER_COMBINED)
-    one_hot_types = np.zeros(marine_type_raster.shape + (num_classes,), dtype=bool)
-    valid_ids = marine_type_raster >= 0  # exclude nodata (-1)
-    idx = np.where(valid_ids)
-    class_ids = marine_type_raster[idx]
-    one_hot_types[idx + (class_ids,)] = True
-    return one_hot_types.astype(np.uint8, copy=False)
-
-
-def rasterize_marine_types(marine_vanntyper, out_shape, transform):
-    _, id_type_map, type_id_map = marine_type_map()
-    # Only keep geometries with valid type_key
-    shapes = [
-        (geom, type_id_map[t])
-        for geom, t in zip(marine_vanntyper.geometry, marine_vanntyper["type_key"])
-        if t in type_id_map
-    ]
-    # Use int8 to reduce memory
-    marine_type_raster = rio.features.rasterize(
-        shapes=shapes,
-        out_shape=out_shape,
-        transform=transform,
-        fill=-1,
-        dtype=np.int8,
-        all_touched=True,
-    )
-    return marine_type_raster
+NAMES = DEPTH_NAMES + ["wave_exposure"]
 
 
 def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
@@ -103,15 +34,6 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
         in_value=in_values,
         out_value=np.nan,
     )
-
-
-def marine_vanntyper_preprocess(marine_vanntyper: gpd.GeoDataFrame):
-
-    marine_vanntyper["type_key"] = marine_vanntyper["Type"].map(
-        lambda x: next((k for k, v in VANNTYPER_COMBINED.items() if x in v), x)
-    )
-
-    return marine_vanntyper
 
 
 def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDataFrame:
@@ -156,7 +78,7 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
 def build(
     dem: xdem.DEM,
     gdf_sea_map: gpd.GeoDataFrame,
-    marine_vanntyper: gpd.GeoDataFrame,
+    bolge_raster: gu.Raster,
     valid_mask: np.ndarray,
     res: int = 50,
     dtype=np.float32,
@@ -195,25 +117,40 @@ def build(
             del slope, curvature
         del raster, data
 
+    print("Preparing wave exposure...")
+    wave_src = bolge_raster.data
+    if wave_src.ndim == 3:
+        wave_src = wave_src[0]
+    wave_src_filled = np.ma.filled(wave_src.astype(np.float32), np.nan)
+    wave_data = np.full(out_shape, np.nan, dtype=np.float32)
+    rio.warp.reproject(
+        source=wave_src_filled,
+        destination=wave_data,
+        src_transform=bolge_raster.transform,
+        src_crs=bolge_raster.crs,
+        dst_transform=transform,
+        dst_crs=gdf_sea_map.crs,
+        src_nodata=bolge_raster.nodata,
+        dst_nodata=np.nan,
+        resampling=rio.warp.Resampling.bilinear,
+    )
+    arrays.append(wave_data.astype(dtype, copy=False))
+    del wave_data
+
     if inspect:
         subkart.plot.inspect_arrays(arrays)
 
-    print(f"Preparing marine types...")
-    marine_vanntyper = marine_vanntyper.to_crs(gdf_sea_map.crs)
-    marine_type_raster = subkart.features.rasterize_marine_types(marine_vanntyper, out_shape, transform)
-    one_hot_types = subkart.features.one_hot_encode_marine_types(marine_type_raster)
-    del marine_type_raster
-    print(f"Stacking feature arrays...")
-    features, valid_attrs = stack(arrays, one_hot_types, valid_mask, dtype)
+    print("Stacking feature arrays...")
+    features, valid_attrs = stack(arrays, valid_mask, dtype)
 
     return features, valid_attrs, out_shape, transform
 
 
 def stack(
-    arrays: list[np.ndarray], one_hot_types: np.ndarray, valid_mask: np.ndarray = None, dtype=np.float32
+    arrays: list[np.ndarray], valid_mask: np.ndarray = None, dtype=np.float32
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Stack feature arrays and one-hot types into a 2D scikit-ready dataset,
+    Stack feature arrays into a 2D scikit-ready dataset,
     while minimizing peak memory by avoiding 3D intermediates.
     """
     if valid_mask is None:
@@ -221,18 +158,10 @@ def stack(
     for a in arrays:
         valid_mask &= np.isfinite(a)
 
-    valid_mask &= np.isfinite(one_hot_types).all(axis=-1)
     n_valid = int(valid_mask.sum())
-    num_marine_types = one_hot_types.shape[-1]
-    num_features = len(arrays) + num_marine_types
-    stacked_features = np.empty((n_valid, num_features), dtype=dtype)
+    stacked_features = np.empty((n_valid, len(arrays)), dtype=dtype)
 
-    col = 0
-    for feature_array in arrays:
+    for col, feature_array in enumerate(arrays):
         stacked_features[:, col] = feature_array[valid_mask]
-        col += 1
-
-    one_hot_types_2d = one_hot_types.reshape(-1, num_marine_types)
-    stacked_features[:, col : col + num_marine_types] = one_hot_types_2d[valid_mask.ravel(), :]
 
     return stacked_features, valid_mask

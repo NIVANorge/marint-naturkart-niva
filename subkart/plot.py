@@ -44,7 +44,6 @@ def feature_importance(classifier, X_val, y_val):
         classifier, X_val, y_val, n_repeats=10, random_state=42, n_jobs=2
     )
 
-    _, id_type_map, _ = subkart.features.marine_type_map()
     feature_names = subkart.features.NAMES
 
     # Sort features by importance
@@ -138,47 +137,10 @@ def terrain_features(gdf):
     plt.tight_layout()
 
 
-def one_hot_vanntyper(one_hot_types, transform, crs, cols, rows):
-
-    _, id_type_map, _ = subkart.features.marine_type_map()
-    types = sorted(id_type_map.items())  # list of (class_id, type_code)
-    n = len(types)
-    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
-
-    for i, (cid, tcode) in enumerate(types):
-        ax = axes.flat[i]
-        layer = one_hot_types[..., cid].astype(np.uint8)
-        if np.all(layer == 0):
-            ax.set_title(f"{tcode} (empty)")
-            ax.axis("off")
-            continue
-        r = gu.Raster.from_array(layer, transform=transform, crs=crs)
-        r.plot(ax=ax)
-        ax.set_title(f"{tcode} (id {cid})")
-
-    for j in range(i + 1, rows * cols):
-        axes.flat[j].axis("off")
-
-    plt.tight_layout()
-
-
-def vanntyper(marine_vanntyper):
-
-    ax = marine_vanntyper.plot(
-        column="type_key",
-        legend=True,
-        figsize=(8, 8),
-        edgecolor="black",
-        linewidth=0.2,
-        alpha=0.7,
-    )
-
-    ax.set_title("marine_vanntyper")
-
 def inspect_arrays(arrays):
     """Plot feature arrays for inspection."""
 
-    for i, name in enumerate(subkart.features.DEPTH_NAMES):
+    for i, name in enumerate(subkart.features.NAMES):
         plt.figure(figsize=(8, 6))
         plt.imshow(arrays[i], cmap="viridis")
         plt.title(f"Array {name}")
