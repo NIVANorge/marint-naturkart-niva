@@ -67,6 +67,7 @@ validate = "papermill notebooks/04_validate.ipynb notebooks/04_validate.ipynb"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
+sqlite = ">=3.38"
 libgdal-arrow-parquet = ">=3.12.2,<4"
 libgdal-pg = ">=3.12.2,<4"
 pytest = ">=9.0.2,<10"
