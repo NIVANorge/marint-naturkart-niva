@@ -1,7 +1,7 @@
 import rasterio as rio
 
-from subkart import features, labelling, plot, smooth, sources, utils, training
+from subkart import features, labelling, plot, sources, utils, training, vectorize
 
-__all__ = ["features", "utils", "labelling", "sources", "plot", "smooth", "training"]
+__all__ = ["features", "utils", "labelling", "sources", "plot", "training", "vectorize"]
 
 rio.Env(GS_NO_SIGN_REQUEST="YES").__enter__()
