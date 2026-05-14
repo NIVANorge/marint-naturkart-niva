@@ -56,6 +56,8 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
 [tool.pixi.pypi-dependencies]
 subkart = { path = ".", editable = true }
+geopandas = ">=1"
+geoutils = ">=0.2"
 
 [tool.pixi.tasks]
 labelling = "papermill notebooks/01_labelling.ipynb notebooks/01_labelling.ipynb"
@@ -69,19 +71,5 @@ libgdal-arrow-parquet = ">=3.12.2,<4"
 libgdal-pg = ">=3.12.2,<4"
 pytest = ">=9.0.2,<10"
 papermill = ">=2.7.0,<3"
-
-[tool.pixi.feature.grass]
-platforms = ["linux-64"]
-
-[tool.pixi.feature.grass.dependencies]
 grass = ">=8"
-python = "3.10.*"
-gdal = ">=3.12,<3.13"
-scikit-learn = "==1.7.1"
 
-[tool.pixi.feature.grass.pypi-dependencies]
-geopandas = ">=1"
-geoutils = ">=0.2"
-
-[tool.pixi.environments]
-grass = { features = ["grass"], no-default-feature = true }
