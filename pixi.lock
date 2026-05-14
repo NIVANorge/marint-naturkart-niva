@@ -12648,7 +12648,7 @@ packages:
 - pypi: ./
   name: subkart
   version: 0.1.0
-  sha256: 1babb7643380ceace454cf447a2bd05d225da05eb19676758ea70523ea404290
+  sha256: 707b55a163085b487ff6e57abc2e3e0a2b5ef65d74c0bfdaac1d398a13a2b12b
   requires_dist:
   - geoalchemy2>=0.18.1
   - geopandas>=1.1.2
