@@ -6,6 +6,8 @@ import xdem
 
 import subkart
 
+RESOLUTION = 50
+"""Resolution of the rasterized output."""
 DEM_FEATURE_NAMES = ["dem_depth", "dem_slope", "dem_curvature", "is_dem"]
 SEA_MAP_NAMES = ["sea_avg_depth", "sea_avg_slope", "sea_compactness", "sea_convexity"]
 
