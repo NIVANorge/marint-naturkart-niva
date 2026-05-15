@@ -84,9 +84,9 @@ def marine_vanntyper():
 def bolge_exposure():
     """Read bolge exposure data
 
-    Read bolge exposure raster from gs://niva-geodata/MarintNaturKart/input/niva/EswmRasterFill.tif
+    Read bolge exposure raster from gs://niva-geodata/MarintNaturKart/input/niva/EswmRaster_filled_cog.tif
     """
-    return gu.Raster("gs://niva-geodata/MarintNaturKart/input/niva/EswmRasterFill.tif")
+    return gu.Raster("gs://niva-geodata/MarintNaturKart/input/niva/EswmRaster_filled_cog.tif")
 
 
 def prepare_sea_basis_depth_data():
