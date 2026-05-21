@@ -84,7 +84,12 @@ def marine_vanntyper():
 def bolge_exposure():
     """Read bolge exposure data
 
-    Read bolge exposure raster from gs://niva-geodata/MarintNaturKart/input/niva/EswmRaster_filled_cog.tif
+    Read bolge exposure raster with additional 2 pixel filling
+
+    Bølgeeksponeringsmodellen (Isæus 2004, Isæus og Rygg 2005) er kjørt for Norge av Norsk institutt for vannforskning (NIVA), 
+    tilgjengeliggjort som en del av kartgrunnlaget beskrevet i Bekkby m.fl. (2025) 
+    til grunn for kartlegging etter Miljødirektoratets instruks (Miljødirektoratet 2026)
+
     """
     return gu.Raster("gs://niva-geodata/MarintNaturKart/input/niva/EswmRaster_filled_cog.tif")
 
