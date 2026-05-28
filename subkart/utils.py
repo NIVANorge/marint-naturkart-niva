@@ -93,8 +93,8 @@ def merge_rasters(file_list: list[Path], fname: Path, nodata):
     vrt_ds = gdal.BuildVRT("/vsimem/merged.vrt", src_ds_list, options=vrt_options)
 
     translate_options = gdal.TranslateOptions(
-        format="GTiff",
-        creationOptions=["COMPRESS=DEFLATE", "TILED=YES"],
+        format="COG",
+        creationOptions=["COMPRESS=DEFLATE", "OVERVIEWS=IGNORE_EXISTING", "RESAMPLING=NEAREST"],
         noData=nodata,
     )
     gdal.Translate(fname, vrt_ds, options=translate_options)
