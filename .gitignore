@@ -16,7 +16,7 @@ mdir/*
 geonorge/*
 notebooks/data/
 notebooks/**/*.aux.xml
-niva/**/*.aux.xml
+niva/**
 
 # pixi environments
 .pixi/*
