@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 from scipy.stats import randint, uniform
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
@@ -97,6 +98,7 @@ def optimize_xgboost_hyperparameters(
     X_val,
     y_val,
     classes,
+    class_weights: dict = None,
     cv_results_path: Path = None,
     n_iter: int = 50,
     cv_folds: int = 3,
@@ -107,8 +109,14 @@ def optimize_xgboost_hyperparameters(
 ):
     """
     Find optimal hyperparameters for XGBoost classifier using randomized search.
-    
+
     Uses stratified K-fold cross-validation and early stopping to prevent overfitting.
+
+    Parameters
+    ----------
+    class_weights : dict, optional
+        Per-class weights {class_label: weight}. Passed as sample_weight to XGBoost
+        so that misclassifications of rare/important classes are penalized more.
     """
     
     # Load existing best parameters if available
@@ -173,13 +181,20 @@ def optimize_xgboost_hyperparameters(
         return_train_score=True,  # Track train scores to detect overfitting
     )
     
+    # Build per-sample weights from class_weights (if provided)
+    sample_weight_train = None
+    if class_weights is not None:
+        sample_weight_train = np.array([class_weights[int(c)] for c in y_train])
+
     # Fit with validation set for early stopping
-    random_search.fit(
-        X_train, 
-        y_train,
-        eval_set=[(X_val, y_val)],  # Use validation set for early stopping
-        verbose=False
-    )
+    fit_kwargs = {
+        "eval_set": [(X_val, y_val)],
+        "verbose": False,
+    }
+    if sample_weight_train is not None:
+        fit_kwargs["sample_weight"] = sample_weight_train
+
+    random_search.fit(X_train, y_train, **fit_kwargs)
     
     # Get best model (already fitted during CV)
     best_classifier = random_search.best_estimator_
