@@ -101,13 +101,17 @@ def prepare_sea_basis_depth_data():
     This data is used as a basis for further analysis and modeling and output saved to geoparquet format.
     """
     layer = "Dybdeareal"
-
+    torrfall_layer = "Tørrfall"
     for region in FYLKER:
         gml_path = Path(__file__).resolve().parent.parent / f"geonorge/Basisdata_{region}_25833_Dybdedata_GML.gml"
         output_path = Path(__file__).resolve().parent.parent / Path(
             f"geonorge/Basisdata_{region}_25833_Dybdedata_{layer}.geo.parquet"
         )
         gdf = gpd.read_file(gml_path, layer=layer)
+        gdf_torrfall = gpd.read_file(gml_path, layer=torrfall_layer)
+        gdf_torrfall["minimumsdybde"] = 0
+        gdf_torrfall["maksimumsdybde"] = 0.5
+        gdf = pd.concat([gdf, gdf_torrfall], ignore_index=True)
         gdf = subkart.utils.dissolve_geometries(gdf, by_col="minimumsdybde")
         gdf.to_parquet(output_path, compression="snappy")
         print(f"Written GeoParquet to {output_path}")
