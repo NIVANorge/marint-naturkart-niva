@@ -97,10 +97,9 @@ def _vectorize_inside_grass(input_raster: str, output_gpkg: str) -> None:
     )
 
 
-def grass(
+def with_grass(
     input_raster: Path | str,
     output_gpkg: Path | str,
-    vanntyper_path: Path | str | None = None,
 ) -> Path:
     """Vectorize prediction *input_raster* via GRASS and fill gaps to the marine
     vanntyper outline.
@@ -110,7 +109,7 @@ def grass(
     input_raster:
         Merged prediction raster (e.g. ``norge_merged.tif``).
     output_gpkg:
-        Destination GeoPackage path. 
+        Destination GeoPackage path.
     """
     input_raster = Path(input_raster).resolve()
     output_gpkg = Path(output_gpkg).resolve()
@@ -125,9 +124,15 @@ def grass(
     print(f"Vectorizing {input_raster.name} (EPSG:{epsg}) …")
     subprocess.run(
         [
-            "grass", "--tmp-project", f"EPSG:{epsg}", "--exec",
-            sys.executable, str(Path(__file__).resolve()),
-            "--inner", str(input_raster), str(output_gpkg),
+            "grass",
+            "--tmp-project",
+            f"EPSG:{epsg}",
+            "--exec",
+            sys.executable,
+            str(Path(__file__).resolve()),
+            "--inner",
+            str(input_raster),
+            str(output_gpkg),
         ],
         check=True,
     )

@@ -84,6 +84,7 @@ def merge_rasters(file_list: list[Path], fname: Path, nodata):
     """Merge multiple raster files into one using GDAL."""
 
     gdal.UseExceptions()
+    nodata = float(nodata)  # GDAL requires a Python float; numpy scalars (e.g. float16) cause overview dtype mismatches
     src_ds_list = [gdal.Open(f, gdal.GA_ReadOnly) for f in file_list]
 
     vrt_options = gdal.BuildVRTOptions(
@@ -93,8 +94,8 @@ def merge_rasters(file_list: list[Path], fname: Path, nodata):
     vrt_ds = gdal.BuildVRT("/vsimem/merged.vrt", src_ds_list, options=vrt_options)
 
     translate_options = gdal.TranslateOptions(
-        format="COG",
-        creationOptions=["COMPRESS=DEFLATE", "OVERVIEWS=IGNORE_EXISTING", "RESAMPLING=NEAREST"],
+        format="GTiff",
+        creationOptions=["COMPRESS=DEFLATE", "TILED=YES"],
         noData=nodata,
     )
     gdal.Translate(fname, vrt_ds, options=translate_options)
