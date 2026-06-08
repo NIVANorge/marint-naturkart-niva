@@ -13,6 +13,8 @@ from sqlalchemy import create_engine
 
 import subkart
 
+GTIFF_OPTIONS = ["COMPRESS=DEFLATE", "TILED=YES", "BLOCKXSIZE=256", "BLOCKYSIZE=256", "BIGTIFF=IF_SAFER"]
+COG_OPTIONS = ["COMPRESS=DEFLATE", "OVERVIEWS=AUTO", "BIGTIFF=IF_SAFER"]
 
 def to_serializable(obj):
     """Convert numpy arrays and other non-serializable types to JSON-serializable formats."""
@@ -78,6 +80,193 @@ def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25
         dst_array = np.ma.masked_equal(dst_array, dem.nodata)
 
     return xdem.DEM.from_array(dst_array, transform=transform, crs=crs, nodata=dem.nodata)
+
+
+def to_cog(src_path: str, dst_path: str) -> None:
+    """Convert a GeoTIFF to a Cloud Optimized GeoTIFF, then remove the source."""
+    gdal.Translate(dst_path, src_path, format="COG", creationOptions=COG_OPTIONS)
+    os.remove(src_path)
+
+
+def remap_prediction(
+    predict_file_unmapped: str,
+    prob_file: str,
+    predict_file_remapped: str,
+    nodata: int = 255,
+    block_size: int = 256,
+) -> None:
+    """Remap class 1 (blanding) to the highest-probability flanking class (0=løsbunn or 2=fastbunn).
+
+    Reads the unmapped prediction and the 3-band probability raster block by block and writes
+    a new single-band prediction raster where every blanding pixel is replaced by whichever of
+    class 0 or class 2 has the higher probability.
+    """
+    pred_ds = gdal.Open(predict_file_unmapped)
+    prob_ds = gdal.Open(prob_file)
+
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        predict_file_remapped,
+        pred_ds.RasterXSize,
+        pred_ds.RasterYSize,
+        1,
+        gdal.GDT_Byte,
+        options=GTIFF_OPTIONS,
+    )
+    out_ds.SetGeoTransform(pred_ds.GetGeoTransform())
+    out_ds.SetProjection(pred_ds.GetProjection())
+
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(nodata)
+    pred_band = pred_ds.GetRasterBand(1)
+    prob_band1 = prob_ds.GetRasterBand(1)
+    prob_band3 = prob_ds.GetRasterBand(3)
+
+    xsize, ysize = pred_ds.RasterXSize, pred_ds.RasterYSize
+    for y in range(0, ysize, block_size):
+        ny = min(block_size, ysize - y)
+        for x in range(0, xsize, block_size):
+            nx = min(block_size, xsize - x)
+            A = pred_band.ReadAsArray(x, y, nx, ny)
+            B = prob_band1.ReadAsArray(x, y, nx, ny)
+            C = prob_band3.ReadAsArray(x, y, nx, ny)
+            result = np.where(A == 1, np.where(B >= C, np.uint8(0), np.uint8(2)), A)
+            out_band.WriteArray(result, x, y)
+
+    out_ds.FlushCache()
+    out_ds = None
+    pred_ds = None
+    prob_ds = None
+
+
+def create_probability_raster(
+    predict_file_remapped: str,
+    prob_file: str,
+    prob_file_processed: str,
+    nodata: int = 255,
+    block_size: int = 256,
+) -> None:
+    """Create a 1-band normalised probability raster from the 3-band source.
+
+    For each valid pixel the stored value is the probability of the predicted class relative to
+    the two non-blanding classes:
+      * class 0 (løsbunn): P(class=0) / (P(class=0) + P(class=2))
+      * class 2 (fastbunn): P(class=2) / (P(class=0) + P(class=2))
+    """
+    pred_ds = gdal.Open(predict_file_remapped)
+    prob_ds = gdal.Open(prob_file)
+
+    driver = gdal.GetDriverByName("GTiff")
+    tmp_path = prob_file_processed + ".tmp.tif"
+    out_ds = driver.Create(
+        tmp_path,
+        pred_ds.RasterXSize,
+        pred_ds.RasterYSize,
+        1,
+        gdal.GDT_Float32,
+        options=GTIFF_OPTIONS,
+    )
+    out_ds.SetGeoTransform(pred_ds.GetGeoTransform())
+    out_ds.SetProjection(pred_ds.GetProjection())
+
+    out_band = out_ds.GetRasterBand(1)
+    out_band.SetNoDataValue(-9999)
+    pred_band = pred_ds.GetRasterBand(1)
+    prob_band1 = prob_ds.GetRasterBand(1)
+    prob_band3 = prob_ds.GetRasterBand(3)
+
+    xsize, ysize = pred_ds.RasterXSize, pred_ds.RasterYSize
+    for y in range(0, ysize, block_size):
+        ny = min(block_size, ysize - y)
+        for x in range(0, xsize, block_size):
+            nx = min(block_size, xsize - x)
+            A = pred_band.ReadAsArray(x, y, nx, ny)
+            B = prob_band1.ReadAsArray(x, y, nx, ny).astype(np.float32)
+            C = prob_band3.ReadAsArray(x, y, nx, ny).astype(np.float32)
+            denom = B + C
+            result = np.where(A == nodata, np.float32(-9999), np.where(A == 2, C / denom, B / denom))
+            out_band.WriteArray(result, x, y)
+
+    out_ds.FlushCache()
+    out_ds = None
+    pred_ds = None
+    prob_ds = None
+
+    to_cog(tmp_path, prob_file_processed)
+
+
+def filter_isolated_pixels(
+    predict_file_remapped: str,
+    prob_file_processed: str,
+    predict_file: str,
+    nodata: int = 255,
+    prob_threshold: float = 0.60,
+    block_size: int = 256,
+) -> None:
+    """Replace single isolated pixels whose probability is below *prob_threshold*.
+
+    Uses ``gdal.SieveFilter`` (threshold=2, 4-connected) to identify isolated pixels, then only
+    applies the replacement where the normalised probability of the current class is below
+    *prob_threshold*.  The probability raster is updated in-place for changed pixels
+    (new probability = 1 − old probability).
+    """
+    driver = gdal.GetDriverByName("GTiff")
+
+    src_ds = gdal.Open(predict_file_remapped)
+    sieved_tmp = predict_file + ".sieved.tmp.tif"
+    sieved_ds = driver.CreateCopy(sieved_tmp, src_ds, options=GTIFF_OPTIONS)
+    gdal.SieveFilter(src_ds.GetRasterBand(1), None, sieved_ds.GetRasterBand(1), threshold=2, connectedness=4)
+    sieved_ds.FlushCache()
+    sieved_ds = None
+    src_ds = None
+
+    pred_orig_ds = gdal.Open(predict_file_remapped)
+    pred_sieved_ds = gdal.Open(sieved_tmp)
+    prob_ds = gdal.Open(prob_file_processed)
+
+    xsize, ysize = pred_orig_ds.RasterXSize, pred_orig_ds.RasterYSize
+
+    pred_tmp = predict_file + ".tmp.tif"
+    pred_out = driver.Create(pred_tmp, xsize, ysize, 1, gdal.GDT_Byte, options=GTIFF_OPTIONS)
+    pred_out.SetGeoTransform(pred_orig_ds.GetGeoTransform())
+    pred_out.SetProjection(pred_orig_ds.GetProjection())
+    pred_out_band = pred_out.GetRasterBand(1)
+    pred_out_band.SetNoDataValue(nodata)
+
+    prob_tmp = prob_file_processed + ".tmp.tif"
+    prob_out = driver.Create(prob_tmp, xsize, ysize, 1, gdal.GDT_Float32, options=GTIFF_OPTIONS)
+    prob_out.SetGeoTransform(prob_ds.GetGeoTransform())
+    prob_out.SetProjection(prob_ds.GetProjection())
+    prob_out_band = prob_out.GetRasterBand(1)
+    prob_out_band.SetNoDataValue(-9999)
+
+    orig_band = pred_orig_ds.GetRasterBand(1)
+    sieved_band = pred_sieved_ds.GetRasterBand(1)
+    prob_band = prob_ds.GetRasterBand(1)
+
+    for y in range(0, ysize, block_size):
+        ny = min(block_size, ysize - y)
+        for x in range(0, xsize, block_size):
+            nx = min(block_size, xsize - x)
+            orig = orig_band.ReadAsArray(x, y, nx, ny)
+            sieved = sieved_band.ReadAsArray(x, y, nx, ny)
+            prob = prob_band.ReadAsArray(x, y, nx, ny).astype(np.float32)
+            apply_change = (orig != sieved) & (orig != nodata) & (prob < prob_threshold)
+            pred_out_band.WriteArray(np.where(apply_change, sieved, orig), x, y)
+            prob_out_band.WriteArray(np.where(apply_change, 1.0 - prob, prob), x, y)
+
+    pred_out.FlushCache()
+    pred_out = None
+    pred_orig_ds = None
+    pred_sieved_ds = None
+    prob_ds = None
+
+    prob_out.FlushCache()
+    prob_out = None
+
+    os.remove(sieved_tmp)
+    to_cog(pred_tmp, predict_file)
+    to_cog(prob_tmp, prob_file_processed)
 
 
 def merge_rasters(file_list: list[Path], fname: Path, nodata):
