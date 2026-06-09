@@ -61,6 +61,7 @@ modelling = "papermill notebooks/02_modelling.ipynb notebooks/02_modelling.ipynb
 predict = "papermill notebooks/03_predict.ipynb notebooks/03_predict.ipynb"
 postprocess = "papermill notebooks/04_postprocess.ipynb notebooks/04_postprocess.ipynb"
 validate = "papermill notebooks/05_validate.ipynb notebooks/05_validate.ipynb"
+install-kernel = "python scripts/install_kernel.py"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
