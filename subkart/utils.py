@@ -323,6 +323,7 @@ def to_tablename(fname: str) -> str:
 
 
 def save_feature_rasters(
+    out_dir: Path,
     prefix: str,
     X: np.ndarray,
     valid_mask: np.ndarray,
@@ -334,13 +335,10 @@ def save_feature_rasters(
     """
     Save each feature array as a separate GeoTIFF file.
     """
-    out_dir = Path("features")
-    out_dir.mkdir(exist_ok=True)
-
     for i, feature_name in enumerate(subkart.features.DEPTH_NAMES):
         band = np.full(out_shape, nodata, dtype=np.float32)
         band[valid_mask] = X[:, i]
-        out_path = Path(f"features/{prefix}_{feature_name}.tif")
+        out_path = out_dir / f"{prefix}_{feature_name}.tif"
         with rio.open(
             out_path,
             "w",
