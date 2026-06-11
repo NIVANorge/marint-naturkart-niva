@@ -31,24 +31,55 @@ def test_interpolate_depth_raster_range():
 
 
 def test_interpolate_depth_raster_gradient():
-    """Interior cells must be deeper than boundary cells."""
-    size = 500
-    polygons = [Polygon([(0, 0), (size, 0), (size, size), (0, size)])]
+    """Depth should increase from shallow neighbour boundary to deep neighbour boundary."""
+    # Two side-by-side polygons matching at depth=10:
+    #   left:  min=0,  max=10
+    #   right: min=10, max=20
+    poly_left  = Polygon([(0, 0), (250, 0), (250, 500), (0, 500)])
+    poly_right = Polygon([(250, 0), (500, 0), (500, 500), (250, 500)])
     gdf = gpd.GeoDataFrame(
-        {"minimumsdybde": [0.0], "maksimumsdybde": [20.0]},
-        geometry=polygons,
+        {"minimumsdybde": [0.0, 10.0], "maksimumsdybde": [10.0, 20.0]},
+        geometry=[poly_left, poly_right],
         crs="EPSG:25833",
     )
-    bounds = (0, 0, size, size)
+    bounds = (0, 0, 500, 500)
     result = interpolate_depth_raster(gdf, bounds, res=50)
 
-    valid = result[np.isfinite(result)]
-    # Corner cells are shallowest, centre cell is deepest
-    assert float(valid.min()) < float(valid.max())
-    # Centre pixel index
-    centre = result[result.shape[0] // 2, result.shape[1] // 2]
-    corner = result[0, 0]
-    assert centre > corner
+    mid_row = result.shape[0] // 2
+
+    # Left polygon: depth increases left→right (0 at outer edge → 10 at shared boundary)
+    left_cols = result[mid_row, :5]   # cols 0-4 are in the left polygon
+    assert float(left_cols[0]) < float(left_cols[-1])
+
+    # Right polygon: depth increases left→right (10 at shared boundary → 20 at outer edge)
+    right_cols = result[mid_row, 5:]  # cols 5-9 are in the right polygon
+    assert float(right_cols[0]) < float(right_cols[-1])
+
+    # Boundary values: left polygon right edge ≈ max_left=10, right polygon left edge ≈ min_right=10
+    assert abs(float(left_cols[-1])  - 10.0) < 2.0
+    assert abs(float(right_cols[0])  - 10.0) < 2.0
+
+
+def test_interpolate_depth_raster_direction_from_neighbour():
+    """The gradient direction must follow the shallow→deep neighbour relationship,
+    not simply edge distance, even when 'deep' is on the left."""
+    # Right polygon is shallower, left polygon is deeper – gradient goes right→left.
+    poly_right = Polygon([(250, 0), (500, 0), (500, 500), (250, 500)])
+    poly_left  = Polygon([(0, 0), (250, 0), (250, 500), (0, 500)])
+    gdf = gpd.GeoDataFrame(
+        {"minimumsdybde": [10.0, 0.0], "maksimumsdybde": [20.0, 10.0]},
+        geometry=[poly_left, poly_right],
+        crs="EPSG:25833",
+    )
+    bounds = (0, 0, 500, 500)
+    result = interpolate_depth_raster(gdf, bounds, res=50)
+
+    mid_row = result.shape[0] // 2
+
+    # Left (deeper) polygon: depth should be higher overall than right (shallower)
+    left_mean  = float(np.nanmean(result[mid_row, :5]))
+    right_mean = float(np.nanmean(result[mid_row, 5:]))
+    assert left_mean > right_mean
 
 
 def test_interpolate_depth_raster_uniform():
