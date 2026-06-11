@@ -2,7 +2,9 @@ import geopandas as gpd
 import geoutils as gu
 import numpy as np
 import rasterio as rio
+import rasterio.features
 import xdem
+from scipy.ndimage import distance_transform_edt
 
 import subkart
 
@@ -36,6 +38,57 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
         in_value=in_values,
         out_value=np.nan,
     )
+
+
+def interpolate_depth_raster(
+    gdf: gpd.GeoDataFrame,
+    bounds: tuple,
+    res: int = 50,
+    dtype=np.float32,
+) -> np.ndarray:
+    """
+    Interpolate depth within each polygon using an edge-distance transform.
+
+    Within each polygon, ``minimumsdybde`` is assigned at the boundary and
+    ``maksimumsdybde`` at the interior point that is furthest from any edge
+    (the pole of inaccessibility). Depth varies linearly between those two
+    extremes according to the normalised distance from the edge, producing a
+    spatially-varying depth estimate that is more accurate than a flat average.
+
+    Returns a 2D float array covering *bounds* at *res* metre resolution,
+    with NaN where no polygon covers a cell.
+    """
+    minx, miny, maxx, maxy = bounds
+    width = int(round((maxx - minx) / res))
+    height = int(round((maxy - miny) / res))
+    transform = rio.transform.from_origin(minx, maxy, res, res)
+    out_shape = (height, width)
+
+    depth_raster = np.full(out_shape, np.nan, dtype=dtype)
+
+    for _, row in gdf.iterrows():
+        min_depth = float(row["minimumsdybde"])
+        max_depth = float(row["maksimumsdybde"])
+
+        mask = rasterio.features.rasterize(
+            [(row.geometry, 1)],
+            out_shape=out_shape,
+            transform=transform,
+            fill=0,
+            dtype=np.uint8,
+        ).astype(bool)
+
+        if not mask.any():
+            continue
+
+        dist = distance_transform_edt(mask)
+        max_dist = dist.max()
+
+        norm_dist = (dist / max_dist).astype(dtype) if max_dist > 0 else np.zeros_like(dist, dtype=dtype)
+
+        depth_raster[mask] = (min_depth + (max_depth - min_depth) * norm_dist)[mask]
+
+    return depth_raster
 
 
 def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDataFrame:
@@ -91,16 +144,25 @@ def build(
     vec_basis = gu.Vector(gdf_sea_map)
 
     arrays = len(DEPTH_NAMES) * [None]
-    
+
+    print("Computing interpolated depth raster...")
+    interp_depth = subkart.features.interpolate_depth_raster(gdf_sea_map, bounds, res, dtype)
+
     for name in SEA_MAP_NAMES:
         print(f"Preparing {name}...")
-        raster = subkart.features.rasterize_area(vec_basis, gdf_sea_map[name], bounds, res)
-        data = raster.data.data.astype(dtype, copy=False)
+
+        if name == "sea_avg_depth":
+            data = interp_depth
+        else:
+            raster = subkart.features.rasterize_area(vec_basis, gdf_sea_map[name], bounds, res)
+            data = raster.data.data.astype(dtype, copy=False)
+            del raster
+
         arrays[DEPTH_NAMES.index(name)] = data
 
         if name == "sea_avg_depth":
             depth = np.ma.filled(dem.data, np.nan).astype(dtype, copy=False)
-            
+
             depth_filled = np.where(np.isnan(depth), -data, depth)
             arrays[DEPTH_NAMES.index("dem_depth")] = depth_filled.astype(dtype, copy=False)
             arrays[DEPTH_NAMES.index("is_dem")] = np.isfinite(depth).astype(dtype, copy=False)
@@ -111,13 +173,17 @@ def build(
                 resolution=res,
                 attribute=["slope", "curvature"],
             )
-            slope_filled = np.where(np.isnan(slope), data, slope)
+            # Derive slope from the interpolated depth gradient as a per-cell fallback,
+            # falling back further to the flat per-polygon estimate where depth is NaN.
+            dy, dx = np.gradient(np.where(np.isnan(interp_depth), 0.0, interp_depth.astype(np.float64)), res)
+            interp_slope = np.degrees(np.arctan(np.sqrt(dx**2 + dy**2))).astype(dtype)
+            interp_slope = np.where(np.isnan(interp_depth), data, interp_slope)
+            slope_filled = np.where(np.isnan(slope), interp_slope, slope)
             arrays[DEPTH_NAMES.index("dem_slope")] = slope_filled.astype(dtype, copy=False)
             arrays[DEPTH_NAMES.index("dem_curvature")] = np.nan_to_num(curvature, nan=0.0).astype(
                 dtype, copy=False
             )  # Set to flat
-            del slope, curvature
-        del raster, data
+            del slope, curvature, dy, dx, interp_slope
 
     print("Preparing wave exposure...")
     wave_src = bolge_raster.data

@@ -21,6 +21,7 @@ dependencies = [
     "sqlalchemy>=2.0.46",
     "xdem>=0.2.2",
     "xgboost (>=3.2.0,<4.0.0)",
+    "scipy>=1.10",
     "gdal (>=3.12.2,<4.0.0)",
     "isort >=8.0.0",
     "black >=26.3.0",

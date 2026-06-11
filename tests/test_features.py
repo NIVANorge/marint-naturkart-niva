@@ -6,10 +6,62 @@ from rasterio.transform import from_origin
 
 from subkart.features import (
     depth_preprocess,
+    interpolate_depth_raster,
     to_raster_shapes,
     stack,
     SEA_MAP_NAMES,
 )
+
+
+def test_interpolate_depth_raster_range():
+    """Interpolated values must fall within [min, max] depth for each polygon."""
+    polygons = [Polygon([(0, 0), (500, 0), (500, 500), (0, 500)])]
+    gdf = gpd.GeoDataFrame(
+        {"minimumsdybde": [5.0], "maksimumsdybde": [25.0]},
+        geometry=polygons,
+        crs="EPSG:25833",
+    )
+    bounds = (0, 0, 500, 500)
+    result = interpolate_depth_raster(gdf, bounds, res=50)
+
+    valid = result[np.isfinite(result)]
+    assert valid.size > 0
+    assert float(valid.min()) >= 5.0 - 1e-4
+    assert float(valid.max()) <= 25.0 + 1e-4
+
+
+def test_interpolate_depth_raster_gradient():
+    """Interior cells must be deeper than boundary cells."""
+    size = 500
+    polygons = [Polygon([(0, 0), (size, 0), (size, size), (0, size)])]
+    gdf = gpd.GeoDataFrame(
+        {"minimumsdybde": [0.0], "maksimumsdybde": [20.0]},
+        geometry=polygons,
+        crs="EPSG:25833",
+    )
+    bounds = (0, 0, size, size)
+    result = interpolate_depth_raster(gdf, bounds, res=50)
+
+    valid = result[np.isfinite(result)]
+    # Corner cells are shallowest, centre cell is deepest
+    assert float(valid.min()) < float(valid.max())
+    # Centre pixel index
+    centre = result[result.shape[0] // 2, result.shape[1] // 2]
+    corner = result[0, 0]
+    assert centre > corner
+
+
+def test_interpolate_depth_raster_uniform():
+    """When min == max the raster should be constant over the polygon."""
+    polygons = [Polygon([(0, 0), (500, 0), (500, 500), (0, 500)])]
+    gdf = gpd.GeoDataFrame(
+        {"minimumsdybde": [10.0], "maksimumsdybde": [10.0]},
+        geometry=polygons,
+        crs="EPSG:25833",
+    )
+    result = interpolate_depth_raster(gdf, (0, 0, 500, 500), res=50)
+    valid = result[np.isfinite(result)]
+    np.testing.assert_allclose(valid, 10.0, atol=1e-5)
 
 
 def test_depth_preprocess():
