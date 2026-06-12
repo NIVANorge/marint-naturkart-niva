@@ -2,11 +2,10 @@ import geopandas as gpd
 import geoutils as gu
 import numpy as np
 import rasterio as rio
-import rasterio.features
 import xdem
-from scipy.ndimage import distance_transform_edt, binary_erosion
 
 import subkart
+from subkart.interpolate import interpolate_depth_raster
 
 RESOLUTION = 50
 """Resolution of the rasterized output."""
@@ -40,140 +39,6 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
     )
 
 
-def interpolate_depth_raster(
-    gdf: gpd.GeoDataFrame,
-    bounds: tuple,
-    res: int = 50,
-    dtype=np.float32,
-    depth_atol: float = 0.01,
-) -> np.ndarray:
-    """
-    Interpolate depth between matching polygon boundaries.
-
-    For each polygon two reference edges are identified in the raster:
-
-    * **Shallow edge** – pixels adjacent to a neighbour whose
-      ``maksimumsdybde`` equals this polygon's ``minimumsdybde``
-      (the contour shared with the shallower neighbour, at depth = min).
-    * **Deep edge** – pixels adjacent to a neighbour whose
-      ``minimumsdybde`` equals this polygon's ``maksimumsdybde``
-      (the contour shared with the deeper neighbour, at depth = max).
-
-    Each raster cell is then assigned::
-
-        depth = min_d + (max_d - min_d) * d_to_shallow / (d_to_shallow + d_to_deep)
-
-    The gradient direction follows the depth ordering from land outward,
-    not polygon shape.  Polygons with no matching depth-neighbour on one
-    or both sides fall back to the polygon's outer boundary as the
-    missing reference edge (degrading to the flat midpoint average when
-    both sides are absent).
-
-    Parameters
-    ----------
-    depth_atol:
-        Absolute tolerance for matching neighbour depth values (default 0.01 m).
-    """
-    minx, miny, maxx, maxy = bounds
-    width  = int(round((maxx - minx) / res))
-    height = int(round((maxy - miny) / res))
-    transform = rio.transform.from_origin(minx, maxy, res, res)
-    out_shape = (height, width)
-
-    gdf = gdf.reset_index(drop=True)
-    min_vals = gdf["minimumsdybde"].to_numpy(dtype=np.float32)
-    max_vals = gdf["maksimumsdybde"].to_numpy(dtype=np.float32)
-
-    # --- Rasterize all polygon IDs in one pass (nodata = -1) -----------------
-    pid = rasterio.features.rasterize(
-        ((geom, i) for i, geom in enumerate(gdf.geometry)),
-        out_shape=out_shape,
-        transform=transform,
-        fill=-1,
-        dtype=np.int32,
-    )
-
-    valid    = pid >= 0
-    pid_safe = np.where(valid, pid, 0)   # safe lookup (nodata mapped to 0, gated by valid)
-    min_r    = np.where(valid, min_vals[pid_safe], np.nan).astype(np.float32)
-    max_r    = np.where(valid, max_vals[pid_safe], np.nan).astype(np.float32)
-    del pid_safe
-
-    # --- Build shallow / deep boundary masks via vectorised neighbour lookup --
-    # For 4-connectivity: exactly one of (di, dj) is ±1, the other is 0.
-    def _shift_pid(di: int, dj: int) -> np.ndarray:
-        """Return pid shifted by (di, dj), filling vacated edges with -1."""
-        out = np.full_like(pid, -1)
-        if di > 0:
-            out[di:, :]         = pid[:height - di, :]
-        elif di < 0:
-            out[:height + di, :] = pid[-di:, :]
-        elif dj > 0:
-            out[:, dj:]          = pid[:, :width - dj]
-        elif dj < 0:
-            out[:, :width + dj]  = pid[:, -dj:]
-        return out
-
-    shallow_bound = np.zeros(out_shape, dtype=bool)
-    deep_bound    = np.zeros(out_shape, dtype=bool)
-
-    with np.errstate(invalid="ignore"):
-        for di, dj in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            nbr      = _shift_pid(di, dj)
-            nbr_v    = nbr >= 0
-            nbr_safe = np.where(nbr_v, nbr, 0)
-            diff     = valid & nbr_v & (nbr != pid)
-
-            # Shallow edge: neighbour.max == this.min  → shared contour is at min depth
-            shallow_bound |= diff & (np.abs(np.where(nbr_v, max_vals[nbr_safe], np.nan) - min_r) <= depth_atol)
-            # Deep edge:    neighbour.min == this.max  → shared contour is at max depth
-            deep_bound    |= diff & (np.abs(np.where(nbr_v, min_vals[nbr_safe], np.nan) - max_r) <= depth_atol)
-            del nbr, nbr_v, nbr_safe, diff
-
-    del min_r, max_r 
-
-    outer_edge = valid & ~binary_erosion(valid, border_value=0)
-
-    # --- Per-polygon interpolation on bounding-box sub-arrays ----------------
-    depth_out = np.full(out_shape, np.nan, dtype=dtype)
-
-    for i, geom in enumerate(gdf.geometry):
-        min_d = float(min_vals[i])
-        max_d = float(max_vals[i])
-
-        # Derive per-polygon bounding box from geometry (O(1), no full-raster scan)
-        bx0, by0, bx1, by1 = geom.bounds
-        r0 = max(int(np.floor((maxy - by1) / res)) - 1, 0)
-        r1 = min(int(np.ceil( (maxy - by0) / res)) + 1, height)
-        c0 = max(int(np.floor((bx0 - minx) / res)) - 1, 0)
-        c1 = min(int(np.ceil( (bx1 - minx) / res)) + 1, width)
-
-        m    = pid[r0:r1, c0:c1] == i
-        if not m.any():
-            continue
-
-        sb_b = shallow_bound[r0:r1, c0:c1] & m
-        db_b = deep_bound   [r0:r1, c0:c1] & m
-
-        # Fallback when one or both reference edges are missing
-        if not sb_b.any() or not db_b.any():
-            oe = outer_edge[r0:r1, c0:c1] & m
-            if not oe.any():
-                oe = m & ~binary_erosion(m, border_value=0)
-            if not sb_b.any():
-                sb_b = oe
-            if not db_b.any():
-                db_b = oe
-
-        d_s   = distance_transform_edt(~sb_b).astype(np.float32)
-        d_d   = distance_transform_edt(~db_b).astype(np.float32)
-        sum_d = d_s + d_d
-        with np.errstate(invalid="ignore", divide="ignore"):
-            t = np.where(sum_d > 0, d_s / sum_d, np.float32(0.5))
-
-        depth_out[r0:r1, c0:c1][m] = min_d + (max_d - min_d) * t[m]
-
-    return depth_out
 
 
 def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDataFrame:

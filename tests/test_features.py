@@ -6,11 +6,11 @@ from rasterio.transform import from_origin
 
 from subkart.features import (
     depth_preprocess,
-    interpolate_depth_raster,
     to_raster_shapes,
     stack,
     SEA_MAP_NAMES,
 )
+from subkart.interpolate import interpolate_depth_raster
 
 
 def test_interpolate_depth_raster_range():
