@@ -130,7 +130,7 @@ def interpolate_depth_raster(
             deep_bound    |= diff & (np.abs(np.where(nbr_v, min_vals[nbr_safe], np.nan) - max_r) <= depth_atol)
             del nbr, nbr_v, nbr_safe, diff
 
-    del min_r, max_r   # large arrays no longer needed
+    del min_r, max_r 
 
     outer_edge = valid & ~binary_erosion(valid, border_value=0)
 
