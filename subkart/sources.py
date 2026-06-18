@@ -45,6 +45,33 @@ def dem_data():
     return dem
 
 
+def sea_map_torrfall(fylker: list[str] = FYLKER):
+    """Map basis data for the specified fylker or all
+
+    Read output from `prepare_basis_depth_data`, if all fylker are specified `depth_training_data.geo.parquet` will be used
+    it already have been preprocessed to add depth features from `features.depth_preprocess`.
+    """
+
+    if fylker == FYLKER:
+        print("Reading preprocessed depth training data for all fylker.")
+        return gpd.read_parquet(
+            "gs://niva-geodata/MarintNaturKart/input/kartverket/sjoekart_dybdedata_trening_norge.geo.parquet"
+        )
+
+    county_files = []
+    for f in fylker:
+        code = next((c for c in FYLKER if c.endswith(f)))
+        county_files.append(
+            f"gs://niva-geodata/MarintNaturKart/input/kartverket/Basisdata_{code}_25833_torrfall.geo.parquet"
+        )
+
+    gdfs = [gpd.read_parquet(path) for path in county_files]
+
+    gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+    del gdfs
+
+    return gdf
+
 def sea_map_basisdata(fylker: list[str] = FYLKER):
     """Map basis data for the specified fylker or all
 
@@ -92,6 +119,22 @@ def bolge_exposure():
 
     """
     return gu.Raster("gs://niva-geodata/MarintNaturKart/input/niva/EswmRaster_filled_cog.tif")
+
+def prepare_torrfall():
+    """Prepare torrfall.
+
+    Data downloaded from Geonorge, at https://kartkatalog.geonorge.no/metadata/sjoekart-dybdedata/2751aacf-5472-4850-a208-3532a51c529a?search=basisdata%20sj%C3%B8
+    
+    """
+    
+    torrfall_layer = "Tørrfall"
+    for region in FYLKER:
+        gml_path = Path(__file__).resolve().parent.parent / f"geonorge/Basisdata_{region}_25833_Dybdedata_GML.gml"
+        output_path = Path(__file__).resolve().parent.parent / Path(
+            f"geonorge/Basisdata_{region}_25833_torrfall.geo.parquet"
+        )
+        gdf_torrfall = gpd.read_file(gml_path, layer=torrfall_layer)
+        gdf_torrfall.to_parquet(output_path, compression="snappy")
 
 
 def prepare_sea_basis_depth_data():
