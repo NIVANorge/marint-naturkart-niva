@@ -90,7 +90,9 @@ def fill_kd490(
         miny = math.floor(b[1] / snap) * snap
         maxx = math.ceil(b[2]  / snap) * snap
         maxy = math.ceil(b[3]  / snap) * snap
-        bounds = [minx, miny, maxx, maxy]
+        # Expand by one pixel on each side so pixels that touch (but whose
+        # centre lies outside) the AOI outline are included in the output.
+        bounds = [minx - resolution, miny - resolution, maxx + resolution, maxy + resolution]
 
         # --- Step 1: reproject -----------------------------------------
         print(f"Reprojecting to {CRS} at {resolution} m...")
