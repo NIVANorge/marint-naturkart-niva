@@ -183,7 +183,7 @@ def prepare_land_data():
     
     gdf = gpd.GeoDataFrame(geometry=geoms, crs=crs)
     gdf.to_file(output_path, layer="landareal", driver="GPKG")
-    
+    gdf.to_parquet(Path(__file__).resolve().parent.parent / "geonorge/Basisdata_Landareal.geo.parquet", compression="snappy")
     union_geom = union_all(geoms)
     del geoms
     
