@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import randint, uniform
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
-from sklearn.model_selection import LeaveOneGroupOut, RandomizedSearchCV, StratifiedKFold, cross_validate, train_test_split
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, cross_validate, train_test_split
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
@@ -168,12 +168,23 @@ def optimize_xgboost_hyperparameters(
         early_stopping_rounds=50,  # Stop if no improvement for 50 rounds
     )
 
+    # Build per-sample weights from class_weights (if provided)
+    sample_weight_train = None
+    if class_weights is not None:
+        sample_weight_train = np.array([class_weights[int(c)] for c in y_train])
+
     # Choose CV strategy: spatial LORO when region labels are available
     if region_labels is not None:
         region_labels = np.asarray(region_labels)
-        unique_regions = np.unique(region_labels)
-        cv_strategy = LeaveOneGroupOut()
-        cv_description = f"spatial Leave-One-Region-Out ({len(unique_regions)} regions: {unique_regions.tolist()})"
+        # Build folds manually so "unknown" samples are included in every training
+        # fold but are never used as a test fold.
+        known_mask = region_labels != "unknown"
+        n_unknown = (~known_mask).sum()
+        known_regions = np.unique(region_labels[known_mask])
+        if n_unknown > 0:
+            print(f"  {n_unknown} samples with unknown region included in all training folds, excluded from test folds.")
+        cv_strategy = _loro_with_unknown_splits(region_labels, known_regions)
+        cv_description = f"spatial Leave-One-Region-Out ({len(known_regions)} regions: {known_regions.tolist()})"
         unique, counts = np.unique(region_labels, return_counts=True)
         print(f"Samples per region: { {r: int(c) for r, c in zip(unique, counts)} }")
     else:
@@ -193,11 +204,6 @@ def optimize_xgboost_hyperparameters(
         return_train_score=True,  # Track train scores to detect overfitting
     )
 
-    # Build per-sample weights from class_weights (if provided)
-    sample_weight_train = None
-    if class_weights is not None:
-        sample_weight_train = np.array([class_weights[int(c)] for c in y_train])
-
     # Fit with validation set for early stopping
     fit_kwargs = {
         "eval_set": [(X_val, y_val)],
@@ -205,8 +211,6 @@ def optimize_xgboost_hyperparameters(
     }
     if sample_weight_train is not None:
         fit_kwargs["sample_weight"] = sample_weight_train
-    if region_labels is not None:
-        fit_kwargs["groups"] = region_labels
 
     random_search_cv.fit(X_train, y_train, **fit_kwargs)
     
@@ -345,6 +349,23 @@ def _create_param_search_around_base(base_params: dict, search_width: float = 0.
     return param_distributions
 
 
+def _loro_with_unknown_splits(region_labels, known_regions):
+    """
+    Generate (train_idx, test_idx) pairs for Leave-One-Region-Out CV.
+
+    Samples labelled ``"unknown"`` are included in every training fold but
+    are never placed in a test fold, so the final model still trains on them.
+    """
+    idx = np.arange(len(region_labels))
+    splits = []
+    for region in known_regions:
+        test_idx = idx[region_labels == region]
+        # train = everything except the held-out region (unknowns stay in train)
+        train_idx = idx[region_labels != region]
+        splits.append((train_idx, test_idx))
+    return splits
+
+
 def spatial_cross_validate(
     classifier,
     X,
@@ -392,8 +413,17 @@ def spatial_cross_validate(
     if scoring is None:
         scoring = ["accuracy", "balanced_accuracy", "f1_macro"]
 
-    logo = LeaveOneGroupOut()
     region_labels = np.asarray(region_labels)
+    X = np.asarray(X)
+    y = np.asarray(y)
+
+    known_mask = region_labels != "unknown"
+    known_regions = np.unique(region_labels[known_mask])
+    n_unknown = (~known_mask).sum()
+    if n_unknown > 0:
+        print(f"  {n_unknown} samples with unknown region included in all training folds, excluded from test folds.")
+
+    cv_splits = _loro_with_unknown_splits(region_labels, known_regions)
 
     fit_params = {}
     if class_weights is not None:
@@ -403,8 +433,7 @@ def spatial_cross_validate(
         classifier,
         X,
         y,
-        groups=region_labels,
-        cv=logo,
+        cv=cv_splits,
         scoring=scoring,
         fit_params=fit_params,
         return_train_score=True,
@@ -412,7 +441,7 @@ def spatial_cross_validate(
     )
 
     print("\nSpatial Leave-One-Region-Out CV results:")
-    unique, counts = np.unique(region_labels, return_counts=True)
+    unique, counts = np.unique(region_labels[known_mask], return_counts=True)
     print(f"  Samples per region: { {r: int(c) for r, c in zip(unique, counts)} }")
     for metric in scoring:
         scores = cv_results[f"test_{metric}"]
