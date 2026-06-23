@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 from scipy.stats import randint, uniform
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, train_test_split
+from sklearn.model_selection import LeaveOneGroupOut, RandomizedSearchCV, StratifiedKFold, cross_validate, train_test_split
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
@@ -99,6 +99,7 @@ def optimize_xgboost_hyperparameters(
     y_val,
     classes,
     class_weights: dict = None,
+    region_labels=None,
     cv_results_path: Path = None,
     n_iter: int = 50,
     cv_folds: int = 3,
@@ -110,19 +111,28 @@ def optimize_xgboost_hyperparameters(
     """
     Find optimal hyperparameters for XGBoost classifier using randomized search.
 
-    Uses stratified K-fold cross-validation and early stopping to prevent overfitting.
+    Uses spatial Leave-One-Region-Out cross-validation when ``region_labels`` are
+    provided, otherwise falls back to stratified K-fold.
 
     Parameters
     ----------
     class_weights : dict, optional
         Per-class weights {class_label: weight}. Passed as sample_weight to XGBoost
         so that misclassifications of rare/important classes are penalized more.
+    region_labels : array-like of shape (n_train_samples,), optional
+        Region code per training sample (e.g. ``N``, ``S``, ``M``, ``H``, ``G``, ``B``
+        from the marine vanntyper ``Region`` column).  When provided, spatial
+        Leave-One-Region-Out CV is used instead of stratified K-fold, giving a more
+        realistic estimate of generalisation to new geographic areas.
+        Obtain with ``subkart.training.assign_region_labels``.
+    cv_folds : int
+        Number of folds for stratified K-fold.  Ignored when ``region_labels`` is given.
     """
-    
+
     # Load existing best parameters if available
     if cv_results_path is None:
         cv_results_path = subkart.utils.model_dir_path() / "cv_best_by_model.json"
-    
+
     base_params = None
     if cv_results_path.exists():
         with open(cv_results_path, "r", encoding="utf-8") as f:
@@ -130,13 +140,11 @@ def optimize_xgboost_hyperparameters(
             if "XGBClassifier" in cv_results:
                 base_params = cv_results["XGBClassifier"]["params"]
                 print(f"Starting search around existing parameters: {base_params}")
-    
+
     # Define search space with stronger regularization
     if base_params is not None:
-        # Search around existing parameters
         param_distributions = _create_param_search_around_base(base_params, search_width)
     else:
-        # Use default wide search space with stronger regularization
         param_distributions = {
             "n_estimators": randint(100, 1000),
             "max_depth": randint(3, 12),  # Reduced max depth to prevent overfitting
@@ -149,7 +157,7 @@ def optimize_xgboost_hyperparameters(
             "reg_lambda": uniform(1.0, 3.0),  # Increased L2 regularization (1.0 to 4.0)
         }
         print("No existing parameters found. Using wide search space.")
-    
+
     # Create base XGBoost classifier with early stopping parameters
     xgb_base = XGBClassifier(
         num_class=len(classes),
@@ -159,28 +167,32 @@ def optimize_xgboost_hyperparameters(
         eval_metric="mlogloss",
         early_stopping_rounds=50,  # Stop if no improvement for 50 rounds
     )
-    
-    # Use stratified K-fold to maintain class distribution
-    cv_strategy = StratifiedKFold(
-        n_splits=cv_folds,
-        shuffle=True,
-        random_state=random_state
-    )
-    
-    # Perform randomized search with stratified CV
-    print(f"\nStarting randomized search with {n_iter} iterations and {cv_folds}-fold stratified CV...")
-    random_search = RandomizedSearchCV(
+
+    # Choose CV strategy: spatial LORO when region labels are available
+    if region_labels is not None:
+        region_labels = np.asarray(region_labels)
+        unique_regions = np.unique(region_labels)
+        cv_strategy = LeaveOneGroupOut()
+        cv_description = f"spatial Leave-One-Region-Out ({len(unique_regions)} regions: {unique_regions.tolist()})"
+        unique, counts = np.unique(region_labels, return_counts=True)
+        print(f"Samples per region: { {r: int(c) for r, c in zip(unique, counts)} }")
+    else:
+        cv_strategy = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
+        cv_description = f"{cv_folds}-fold stratified K-fold"
+
+    print(f"\nStarting randomized search with {n_iter} iterations, {cv_description}...")
+    random_search_cv = RandomizedSearchCV(
         xgb_base,
         param_distributions=param_distributions,
         n_iter=n_iter,
-        cv=cv_strategy,  # Use stratified K-fold
+        cv=cv_strategy,
         verbose=verbose,
         random_state=random_state,
         n_jobs=n_jobs,
         scoring="accuracy",
         return_train_score=True,  # Track train scores to detect overfitting
     )
-    
+
     # Build per-sample weights from class_weights (if provided)
     sample_weight_train = None
     if class_weights is not None:
@@ -193,24 +205,26 @@ def optimize_xgboost_hyperparameters(
     }
     if sample_weight_train is not None:
         fit_kwargs["sample_weight"] = sample_weight_train
+    if region_labels is not None:
+        fit_kwargs["groups"] = region_labels
 
-    random_search.fit(X_train, y_train, **fit_kwargs)
+    random_search_cv.fit(X_train, y_train, **fit_kwargs)
     
     # Get best model (already fitted during CV)
-    best_classifier = random_search.best_estimator_
-    
+    best_classifier = random_search_cv.best_estimator_
+
     # Evaluate on train and validation sets
     train_score = best_classifier.score(X_train, y_train)
     val_score = best_classifier.score(X_val, y_val)
-    
+
     # Calculate overfitting gap
-    cv_train_score = random_search.cv_results_['mean_train_score'][random_search.best_index_]
+    cv_train_score = random_search_cv.cv_results_['mean_train_score'][random_search_cv.best_index_]
     overfitting_gap = train_score - val_score
-    
+
     print(f"\n{'='*60}")
     print(f"Optimization complete!")
     print(f"{'='*60}")
-    print(f"Best CV score: {random_search.best_score_:.4f}")
+    print(f"Best CV score: {random_search_cv.best_score_:.4f}")
     print(f"CV train score: {cv_train_score:.4f}")
     print(f"Train accuracy: {train_score:.4f}")
     print(f"Validation accuracy: {val_score:.4f}")
@@ -218,18 +232,18 @@ def optimize_xgboost_hyperparameters(
     if overfitting_gap > 0.1:
         print("⚠️  Warning: Large overfitting gap detected. Consider more regularization.")
     print(f"\nBest parameters:")
-    for param, value in random_search.best_params_.items():
+    for param, value in random_search_cv.best_params_.items():
         print(f"  {param}: {value}")
-    
+
     # Prepare results dictionary
     search_results = {
-        "best_score": float(random_search.best_score_),
+        "best_score": float(random_search_cv.best_score_),
         "cv_train_score": float(cv_train_score),
         "train_score": float(train_score),
         "val_score": float(val_score),
         "overfitting_gap": float(overfitting_gap),
-        "best_params": random_search.best_params_,
-        "cv_results": random_search.cv_results_,
+        "best_params": random_search_cv.best_params_,
+        "cv_results": random_search_cv.cv_results_,
         "base_params": base_params,
     }
     # Dump summary to JSON (convert numpy arrays to lists)
@@ -329,3 +343,121 @@ def _create_param_search_around_base(base_params: dict, search_width: float = 0.
         param_distributions["reg_lambda"] = uniform(low, 2 * width)
     
     return param_distributions
+
+
+def spatial_cross_validate(
+    classifier,
+    X,
+    y,
+    region_labels,
+    class_weights: dict = None,
+    scoring: list[str] = None,
+    results_path: Path = None,
+):
+    """
+    Evaluate a fitted XGBoost classifier using Leave-One-Region-Out spatial cross-validation.
+
+    Each fold withholds one geographic region (from ``subkart.sources.REGIONS``) as the
+    test set and trains on the remaining regions.  This prevents spatially autocorrelated
+    samples from leaking between train and test, giving a realistic estimate of how the
+    model generalises to new areas.
+
+    Parameters
+    ----------
+    classifier :
+        A scikit-learn compatible classifier (e.g. XGBClassifier).
+    X : array-like of shape (n_samples, n_features)
+        Feature matrix for the full dataset.
+    y : array-like of shape (n_samples,)
+        Target labels.
+    region_labels : array-like of shape (n_samples,)
+        Region group label for each sample.  Should match the keys of
+        ``subkart.sources.REGIONS`` (e.g. ``"vestland"``, ``"sor-ost"``, ``"midt"``,
+        ``"nord"``).  Assign these via a spatial join of sample coordinates with the
+        region boundaries — see ``assign_region_labels``.
+    class_weights : dict, optional
+        Per-class weights ``{class_label: weight}``.  If provided, sample weights are
+        passed to the ``fit`` call of each fold.
+    scoring : list[str], optional
+        Scikit-learn scoring metrics.  Defaults to accuracy, balanced_accuracy and
+        macro f1.
+    results_path : Path, optional
+        If given, CV results are written as JSON to this path.
+
+    Returns
+    -------
+    cv_results : dict
+        Output of ``sklearn.model_selection.cross_validate``.
+    """
+    if scoring is None:
+        scoring = ["accuracy", "balanced_accuracy", "f1_macro"]
+
+    logo = LeaveOneGroupOut()
+    region_labels = np.asarray(region_labels)
+
+    fit_params = {}
+    if class_weights is not None:
+        fit_params["sample_weight"] = np.array([class_weights[int(c)] for c in y])
+
+    cv_results = cross_validate(
+        classifier,
+        X,
+        y,
+        groups=region_labels,
+        cv=logo,
+        scoring=scoring,
+        fit_params=fit_params,
+        return_train_score=True,
+        n_jobs=-1,
+    )
+
+    print("\nSpatial Leave-One-Region-Out CV results:")
+    unique, counts = np.unique(region_labels, return_counts=True)
+    print(f"  Samples per region: { {r: int(c) for r, c in zip(unique, counts)} }")
+    for metric in scoring:
+        scores = cv_results[f"test_{metric}"]
+        fold_summary = {r: round(float(s), 4) for r, s in zip(unique, scores)}
+        print(f"  {metric}: {fold_summary}  →  mean={scores.mean():.4f} ± {scores.std():.4f}")
+
+    if results_path is not None:
+        serializable = subkart.utils.to_serializable(cv_results)
+        with open(results_path, "w", encoding="utf-8") as f:
+            json.dump(serializable, f, indent=2)
+
+    return cv_results
+
+
+def assign_region_labels(coords_xy, crs: str = "EPSG:25833"):
+    """
+    Assign each sample coordinate to a marine vanntyper ``Region`` (N/S/M/H/G/B).
+
+    Performs a spatial join between sample points and the dissolved marine vanntyper
+    polygons, using the ``Region`` column directly.
+
+    Parameters
+    ----------
+    coords_xy : array-like of shape (n_samples, 2)
+        (x, y) coordinates of each sample in ``crs``.
+    crs : str
+        Coordinate reference system of ``coords_xy``.  Defaults to EPSG:25833.
+
+    Returns
+    -------
+    region_labels : np.ndarray of shape (n_samples,)
+        Region code (one of ``N``, ``S``, ``M``, ``H``, ``G``, ``B``) for each
+        sample, or ``"unknown"`` if the point falls outside all regions.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    mv = subkart.sources.marine_vanntyper().to_crs(crs)
+    mv_dissolved = mv[["Region", "geometry"]].dissolve(by="Region").reset_index()
+
+    points = gpd.GeoDataFrame(
+        geometry=[Point(x, y) for x, y in coords_xy],
+        crs=crs,
+    )
+    joined = points.sjoin(mv_dissolved, how="left", predicate="within")
+    # sjoin can produce duplicates if a point falls in overlapping polygons — keep first
+    labels = joined.groupby(level=0)["Region"].first().reindex(range(len(points))).fillna("unknown").to_numpy()
+    return labels
