@@ -1,10 +1,9 @@
 import rasterio as rio
 
-from subkart import evaluation, features, interpolate, labelling, light, plot, sources, utils, training, vectorize
+from mnk.substrat import evaluation, features, interpolate, labelling, plot, sources, utils, training, vectorize
 
 __all__ = [
     "features",
-    "light",
     "interpolate",
     "utils",
     "labelling",

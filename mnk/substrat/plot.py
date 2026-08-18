@@ -7,7 +7,7 @@ import numpy as np
 import geoutils as gu
 from sklearn.metrics import ConfusionMatrixDisplay
 
-import subkart
+import mnk.substrat as subkart
 from sklearn.inspection import permutation_importance
 
 

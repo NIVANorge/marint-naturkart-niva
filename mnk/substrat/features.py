@@ -4,8 +4,8 @@ import numpy as np
 import rasterio as rio
 import xdem
 
-import subkart
-from subkart.interpolate import interpolate_depth_raster
+import mnk.substrat as subkart
+from mnk.substrat.interpolate import interpolate_depth_raster
 
 RESOLUTION = 50
 """Resolution of the rasterized output."""

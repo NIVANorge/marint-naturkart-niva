@@ -10033,6 +10033,33 @@ packages:
   purls: []
   size: 100224829
   timestamp: 1767634557029
+- pypi: ./
+  name: mnk
+  version: 0.1.0
+  sha256: ae21a80d42ed409f49a282d97ceda9503acb29a340e2f9c2d449504f9e0b1de9
+  requires_dist:
+  - geoalchemy2>=0.18.1
+  - geopandas>=1.1.2
+  - lxml>=6.0.2
+  - matplotlib>=3.10.8
+  - psycopg2-binary>=2.9.11
+  - pyarrow>=23.0.0
+  - rasterio>=1.4.4
+  - shapely>=2.1.2
+  - scikit-learn==1.7.1
+  - sqlalchemy>=2.0.46
+  - xdem>=0.2.2
+  - xgboost>=3.2.0,<4.0.0
+  - scipy>=1.10
+  - gdal>=3.12.2,<4.0.0
+  - isort>=8.0.0
+  - black>=26.3.0
+  - nbqa>=1.9.1
+  - ipykernel>=7.2.0
+  - copernicusmarine>=2.2.3,<3
+  - xarray>=2024.1.0
+  - numpy>=1.24
+  requires_python: '>=3.10,<3.15'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/multidict-6.7.1-py313h3dea7bd_0.conda
   sha256: 3d277c0a9e237dc4c64f0b6414f3cf3e95806b2f5d03dec9c50f0ad0db5b7df1
   md5: 4f3e7bf5a9fc60a7d39047ba9e84c84c
@@ -13686,31 +13713,6 @@ packages:
   - pygments ; extra == 'tests'
   - littleutils ; extra == 'tests'
   - cython ; extra == 'tests'
-- pypi: ./
-  name: subkart
-  version: 0.1.0
-  sha256: cb10e299fa3c1e935c39249cad0116924c4709590673366ad5da9fb48def01c3
-  requires_dist:
-  - geoalchemy2>=0.18.1
-  - geopandas>=1.1.2
-  - lxml>=6.0.2
-  - matplotlib>=3.10.8
-  - psycopg2-binary>=2.9.11
-  - pyarrow>=23.0.0
-  - rasterio>=1.4.4
-  - shapely>=2.1.2
-  - scikit-learn==1.7.1
-  - sqlalchemy>=2.0.46
-  - xdem>=0.2.2
-  - xgboost>=3.2.0,<4.0.0
-  - scipy>=1.10
-  - gdal>=3.12.2,<4.0.0
-  - isort>=8.0.0
-  - black>=26.3.0
-  - nbqa>=1.9.1
-  - ipykernel>=7.2.0
-  - copernicusmarine>=2.2.3,<3
-  requires_python: '>=3.10,<3.15'
 - conda: https://conda.anaconda.org/conda-forge/win-64/tbb-2022.3.0-h3155e25_2.conda
   sha256: abd9a489f059fba85c8ffa1abdaa4d515d6de6a3325238b8e81203b913cf65a9
   md5: 0f9817ffbe25f9e69ceba5ea70c52606

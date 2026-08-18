@@ -11,7 +11,7 @@ from shapely.errors import GEOSException
 from shapely.validation import explain_validity, make_valid
 from sqlalchemy import create_engine
 
-import subkart
+import mnk.substrat as subkart
 
 GTIFF_OPTIONS = ["COMPRESS=DEFLATE", "TILED=YES", "BLOCKXSIZE=256", "BLOCKYSIZE=256", "BIGTIFF=IF_SAFER"]
 COG_OPTIONS = ["COMPRESS=DEFLATE", "OVERVIEWS=AUTO", "BIGTIFF=IF_SAFER"]

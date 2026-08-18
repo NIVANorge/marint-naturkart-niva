@@ -6,9 +6,9 @@ from sklearn.datasets import make_classification
 from sklearn.base import is_classifier
 from xgboost import XGBClassifier
 
-from subkart.training import random_search, optimize_xgboost_hyperparameters 
+from mnk.substrat.training import random_search, optimize_xgboost_hyperparameters 
 
-@patch("subkart.utils.model_dir_path")
+@patch("mnk.substrat.utils.model_dir_path")
 def test_random_search_runs_and_saves_output(mock_model_dir, tmp_path):
     mock_model_dir.return_value = tmp_path
     
@@ -46,7 +46,7 @@ def test_random_search_runs_and_saves_output(mock_model_dir, tmp_path):
         assert "params" in saved_data[model_name]
 
 
-@patch("subkart.utils.model_dir_path")
+@patch("mnk.substrat.utils.model_dir_path")
 def test_optimize_xgboost_hyperparameters_without_base_params(mock_model_dir, tmp_path):
     """Test optimization function when no base parameters exist"""
     mock_model_dir.return_value = tmp_path
@@ -109,7 +109,7 @@ def test_optimize_xgboost_hyperparameters_without_base_params(mock_model_dir, tm
     assert xgboost_results_path.exists(), "xgboost_results.json was not written to tmp location"
 
 
-@patch("subkart.utils.model_dir_path")
+@patch("mnk.substrat.utils.model_dir_path")
 def test_optimize_xgboost_hyperparameters_with_base_params(mock_model_dir, tmp_path):
     """Test optimization function when base parameters exist"""
     mock_model_dir.return_value = tmp_path
@@ -186,7 +186,7 @@ def test_optimize_xgboost_hyperparameters_with_base_params(mock_model_dir, tmp_p
     assert xgboost_results_path.exists(), "xgboost_results.json was not written to tmp location"
 
 
-@patch("subkart.utils.model_dir_path")
+@patch("mnk.substrat.utils.model_dir_path")
 def test_optimize_xgboost_hyperparameters_custom_search_width(mock_model_dir, tmp_path):
     """Test that custom search_width parameter is respected"""
     mock_model_dir.return_value = tmp_path

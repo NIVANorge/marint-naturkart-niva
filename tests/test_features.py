@@ -4,13 +4,13 @@ import pytest
 from shapely.geometry import Polygon, Point
 from rasterio.transform import from_origin
 
-from subkart.features import (
+from mnk.substrat.features import (
     depth_preprocess,
     to_raster_shapes,
     stack,
     SEA_MAP_NAMES,
 )
-from subkart.interpolate import interpolate_depth_raster
+from mnk.substrat.interpolate import interpolate_depth_raster
 
 
 def test_interpolate_depth_raster_range():

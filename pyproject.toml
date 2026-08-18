@@ -1,6 +1,6 @@
 
 [project]
-name = "subkart"
+name = "mnk"
 version = "0.1.0"
 description = ""
 authors = [
@@ -26,13 +26,19 @@ dependencies = [
     "isort >=8.0.0",
     "black >=26.3.0",
     "nbqa >=1.9.1",
-    "ipykernel >=7.2.0"
-, "copernicusmarine>=2.2.3,<3"]
+    "ipykernel >=7.2.0",
+    "copernicusmarine>=2.2.3,<3",
+    "xarray>=2024.1.0",
+    "numpy>=1.24",
+]
 
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [{include = "mnk"}]
 
 [tool.black]
 line-length = 120
@@ -52,16 +58,16 @@ channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
 [tool.pixi.pypi-dependencies]
-subkart = { path = ".", editable = true }
+mnk = { path = ".", editable = true }
 geopandas = ">=1"
 geoutils = ">=0.2"
 
 [tool.pixi.tasks]
-labelling = "papermill notebooks/01_labelling.ipynb notebooks/01_labelling.ipynb"
-modelling = "papermill notebooks/02_modelling.ipynb notebooks/02_modelling.ipynb"
-predict = "papermill notebooks/03_predict.ipynb notebooks/03_predict.ipynb"
-postprocess = "papermill notebooks/04_postprocess.ipynb notebooks/04_postprocess.ipynb"
-validate = "papermill notebooks/05_validate.ipynb notebooks/05_validate.ipynb"
+labelling = "papermill notebooks/01_substrat_labelling.ipynb notebooks/01_substrat_labelling.ipynb"
+modelling = "papermill notebooks/02_substrat_modelling.ipynb notebooks/02_substrat_modelling.ipynb"
+predict = "papermill notebooks/03_substrat_predict.ipynb notebooks/03_substrat_predict.ipynb"
+postprocess = "papermill notebooks/04_substrat_postprocess.ipynb notebooks/04_substrat_postprocess.ipynb"
+validate = "papermill notebooks/05_substrat_validate.ipynb notebooks/05_substrat_validate.ipynb"
 install-kernel = "python scripts/install_kernel.py"
 dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features.ipynb"
 

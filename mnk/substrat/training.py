@@ -8,7 +8,7 @@ from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, cross_v
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
-import subkart
+import mnk.substrat as subkart
 
 
 def random_search(X_train, y_train, X_val, y_val, classes, class_weights):

@@ -10,7 +10,7 @@ import shapely
 import rasterio as rio
 from shapely import union_all
 
-import subkart
+import mnk.substrat as subkart
 import geoutils as gu
 
 FYLKER = [
