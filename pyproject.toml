@@ -27,7 +27,7 @@ dependencies = [
     "black >=26.3.0",
     "nbqa >=1.9.1",
     "ipykernel >=7.2.0"
-]
+, "copernicusmarine>=2.2.3,<3"]
 
 
 [build-system]
