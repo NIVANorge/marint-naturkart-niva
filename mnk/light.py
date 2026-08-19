@@ -26,11 +26,20 @@ def merge_kd490_datasets(
     lon_range: tuple[float, float],
     lat_range: tuple[float, float],
     res_deg: float = 0.01,
+    month_range: tuple[int, int] | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute temporal means of KD490 and mosaic onto a common grid.
 
     Prefers Atlantic (higher resolution) where available, fills gaps
     with Arctic data.
+
+    Parameters
+    ----------
+    ds_atl, ds_arc : xarray Datasets with KD490 variable.
+    lon_range, lat_range : bounding box for the output grid.
+    res_deg : output grid resolution in degrees.
+    month_range : optional (start_month, end_month) to filter by season
+        before computing the mean (e.g. (4, 10) for April–October).
 
     Returns
     -------
@@ -41,8 +50,18 @@ def merge_kd490_datasets(
     lon_min, lon_max = lon_range
     lat_min, lat_max = lat_range
 
-    kd_atl_mean = ds_atl["KD490"].mean(dim="time", skipna=True).compute()
-    kd_arc_mean = ds_arc["KD490"].mean(dim="time", skipna=True).compute()
+    kd_atl = ds_atl["KD490"]
+    kd_arc = ds_arc["KD490"]
+
+    if month_range is not None:
+        m_start, m_end = month_range
+        kd_atl = kd_atl.sel(time=kd_atl.time.dt.month.isin(range(m_start, m_end + 1)))
+        kd_arc = kd_arc.sel(time=kd_arc.time.dt.month.isin(range(m_start, m_end + 1)))
+        print(f"Filtered to months {m_start}–{m_end}: "
+              f"Atlantic {kd_atl.sizes['time']} days, Arctic {kd_arc.sizes['time']} days")
+
+    kd_atl_mean = kd_atl.mean(dim="time", skipna=True).compute()
+    kd_arc_mean = kd_arc.mean(dim="time", skipna=True).compute()
 
     lons = np.arange(lon_min, lon_max, res_deg)
     lats = np.arange(lat_max, lat_min, -res_deg)
