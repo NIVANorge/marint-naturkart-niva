@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 import shapely
 from osgeo import gdal, ogr, osr
-from scipy.ndimage import binary_dilation, distance_transform_edt
+from scipy.ndimage import binary_dilation
 from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
@@ -177,13 +177,29 @@ def pad_nodata(arr: np.ndarray, nodata: int = 255) -> np.ndarray:
 
     This ensures vectorized polygons extend slightly beyond the data boundary
     so that land subtraction cleanly removes coastal edges.
+
+    Uses shifted arrays to find neighbor values without allocating full-size
+    index arrays (memory-efficient for large rasters).
     """
     valid_mask = arr != nodata
     boundary = binary_dilation(valid_mask) & ~valid_mask
-    _, nn_idx = distance_transform_edt(~valid_mask, return_indices=True)
-
     padded = arr.copy()
-    padded[boundary] = arr[nn_idx[0][boundary], nn_idx[1][boundary]]
+
+    # Fill boundary pixels by checking shifted neighbors (8-connected)
+    unfilled = boundary.copy()
+    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+        if not unfilled.any():
+            break
+        # Shift valid_mask and arr to align neighbors
+        src_slice_r = slice(max(0, dr), arr.shape[0] + min(0, dr))
+        src_slice_c = slice(max(0, dc), arr.shape[1] + min(0, dc))
+        dst_slice_r = slice(max(0, -dr), arr.shape[0] + min(0, -dr))
+        dst_slice_c = slice(max(0, -dc), arr.shape[1] + min(0, -dc))
+
+        can_fill = unfilled[dst_slice_r, dst_slice_c] & valid_mask[src_slice_r, src_slice_c]
+        padded[dst_slice_r, dst_slice_c][can_fill] = arr[src_slice_r, src_slice_c][can_fill]
+        unfilled[dst_slice_r, dst_slice_c][can_fill] = False
+
     return padded
 
 
