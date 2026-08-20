@@ -1,6 +1,7 @@
 import rasterio as rio
 
-from mnk.substrat import evaluation, features, interpolate, labelling, plot, sources, utils, training, vectorize
+from mnk.substrat import evaluation, features, interpolate, labelling, plot, sources, utils, training
+from mnk import vectorize
 
 __all__ = [
     "features",
