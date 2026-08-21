@@ -130,7 +130,6 @@ def _fill_polygon_depths(
     res: int,
     dtype,
     gdf_points: gpd.GeoDataFrame | None = None,
-    depth_range_threshold: float = 20.0,
     min_points: int = 5,
 ) -> np.ndarray:
     """Fill each polygon's pixels using a distance-transform interpolation.
@@ -143,8 +142,8 @@ def _fill_polygon_depths(
     Polygons whose reference edge cannot be found fall back to ``outer_edge``
     (degrades to constant midpoint when both edges are absent).
 
-    When *gdf_points* is provided, polygons whose depth range exceeds
-    *depth_range_threshold* and whose minimum depth is shallow (< 15 m) are
+    When *gdf_points* is provided, polygons with a wide depth range (>150 m)
+    and whose minimum depth is shallow (< 15 m) are
     filled using point-based RBF interpolation instead, falling back to the
     distance-transform for cells that the RBF cannot cover.
 
@@ -180,7 +179,7 @@ def _fill_polygon_depths(
         # Try point-based interpolation for wide-range polygons
         if (
             point_tree is not None
-            and _needs_point_refinement(geom.area, min_d, max_d, depth_range_threshold)
+            and _needs_point_refinement(geom.area, min_d, max_d)
         ):
             pt_vals = _fill_polygon_from_points(
                 geom, gdf_points, point_tree,
@@ -222,10 +221,11 @@ def _needs_point_refinement(
     area: float,
     min_d: float,
     max_d: float,
-    depth_range_threshold: float,
 ) -> bool:
-    """Return True if a polygon would benefit from point-based depth."""
-    return (max_d - min_d) > depth_range_threshold and min_d < 15
+    """Return True if a polygon would benefit from point-based depth.
+    
+    Typical polygons going from 0.5m to 200m"""
+    return (max_d - min_d) >= 150 and min_d < 1
 
 
 def _build_point_spatial_index(gdf_points: gpd.GeoDataFrame) -> shapely.STRtree:
@@ -318,7 +318,6 @@ def interpolate_depth_raster(
     dtype=np.float32,
     depth_atol: float = 0.01,
     gdf_points: gpd.GeoDataFrame | None = None,
-    depth_range_threshold: float = 20.0,
     min_points: int = 5,
 ) -> np.ndarray:
     """Interpolate depth between matching polygon boundaries.
@@ -353,9 +352,6 @@ def interpolate_depth_raster(
         Optional GeoDataFrame of measured depth points (columns: ``dybde``,
         ``geometry``).  When provided, wide-range polygons are refined using
         point-based RBF interpolation.
-    depth_range_threshold :
-        Minimum ``maksimumsdybde - minimumsdybde`` (metres) for a polygon to
-        qualify for point-based refinement (default 20).
     min_points :
         Minimum number of measured points inside a polygon required to use
         the RBF interpolator (default 5).
@@ -379,7 +375,6 @@ def interpolate_depth_raster(
         gdf, pid, shallow_bound, deep_bound, outer_edge,
         min_vals, max_vals, out_shape, bounds, res, dtype,
         gdf_points=gdf_points,
-        depth_range_threshold=depth_range_threshold,
         min_points=min_points,
     )
 
