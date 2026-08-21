@@ -43,11 +43,6 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
 
 def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDataFrame:
 
-    if all(name in gdf.columns for name in SEA_MAP_NAMES) and not is_rerun:
-        print("All depth features already present, skipping preprocessing.")
-        return gdf
-    gdf.dissolve(by="minimumsdybde", as_index=False)
-    gdf.explode(index_parts=False).reset_index()
     gdf["sea_avg_depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
     # Effective Width (or hydraulic mean width)
     gdf["sea_avg_slope"] = np.degrees(
