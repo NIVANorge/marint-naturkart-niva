@@ -1,4 +1,4 @@
-"""Install the subkart Jupyter kernel with correct PROJ/GDAL env vars.
+"""Install the mnk Jupyter kernel with correct PROJ/GDAL env vars.
 
 When running on JupyterHub with a conda base environment, the kernel would
 otherwise inherit conflicting PROJ_DATA/GDAL_DATA paths. Running this script
@@ -14,11 +14,11 @@ from pathlib import Path
 
 def main():
     subprocess.run(
-        [sys.executable, "-m", "ipykernel", "install", "--user", "--name", "subkart", "--display-name", "subkart"],
+        [sys.executable, "-m", "ipykernel", "install", "--user", "--name", "mnk", "--display-name", "mnk"],
         check=True,
     )
 
-    kernel_json = Path.home() / ".local/share/jupyter/kernels/subkart/kernel.json"
+    kernel_json = Path.home() / ".local/share/jupyter/kernels/mnk/kernel.json"
     with open(kernel_json) as f:
         kernel = json.load(f)
 
