@@ -51,7 +51,7 @@ def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
 
 
 def model_dir_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "model"
+    return Path(__file__).resolve().parent.parent.parent / "model"
 
 
 def load_classifier():
