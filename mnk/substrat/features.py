@@ -41,7 +41,7 @@ def rasterize_area(vector: gu.Vector, in_values, bounds: tuple, res: int = 50):
 
 
 
-def depth_preprocess(gdf: gpd.GeoDataFrame, is_rerun: bool = False) -> gpd.GeoDataFrame:
+def depth_preprocess(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     gdf["sea_avg_depth"] = (gdf["maksimumsdybde"] + gdf["minimumsdybde"]) / 2
     # Effective Width (or hydraulic mean width)
