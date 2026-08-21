@@ -73,12 +73,6 @@ def sea_map_basisdata(fylker: list[str] = FYLKER):
     it already have been preprocessed to add depth features from `features.depth_preprocess`.
     """
 
-    if fylker == FYLKER:
-        print("Reading preprocessed depth training data for all fylker.")
-        return gpd.read_parquet(
-            "gs://niva-geodata/MarintNaturKart/input/kartverket/sjoekart_dybdedata_trening_norge.geo.parquet"
-        )
-
     county_files = []
     for f in fylker:
         code = next((c for c in FYLKER if c.endswith(f)))
