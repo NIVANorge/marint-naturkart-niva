@@ -30,25 +30,6 @@ def to_serializable(obj):
     else:
         return obj
 
-def dissolve_geometries(gdf: gpd.GeoDataFrame, by_col: str):
-    """Dissolve geometries to fix neighboring features that are split on same depth"""
-    try:
-        gdf_dissolved = gdf.dissolve(by=by_col, as_index=False)
-    except GEOSException as e:
-        print(f"TopologicalError while dissolving {e}")
-        invalid_mask = ~gdf.geometry.is_valid
-        bad = gdf.loc[invalid_mask].copy()
-
-        print(f"Invalid geometries: {invalid_mask.sum()} / {len(gdf)}")
-        for i, geom in zip(bad.index, bad.geometry):
-            print(i, explain_validity(geom))
-        gdf["geometry"] = gdf.geometry.apply(make_valid)
-        gdf_dissolved = gdf.dissolve(by=by_col, as_index=False)
-
-    gdf_exploded = gdf_dissolved.explode(index_parts=False).reset_index(drop=True)
-
-    return gdf_exploded
-
 
 def model_dir_path() -> Path:
     return Path(__file__).resolve().parent.parent.parent / "model"

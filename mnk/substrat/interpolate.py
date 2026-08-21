@@ -7,12 +7,17 @@ four focused helpers that can also be called independently:
 * :func:`_build_boundary_masks`      – detect shallow / deep edges per polygon
 * :func:`_fill_polygon_depths`       – per-polygon distance-transform interpolation
 * :func:`_smooth_polygon_boundaries` – Gaussian blend at polygon boundaries
+
+When a :class:`~geopandas.GeoDataFrame` of measured depth points is supplied,
+polygons with a wide depth range are refined using point-based interpolation
+(see :func:`_fill_polygon_from_points`).
 """
 
 import geopandas as gpd
 import numpy as np
 import rasterio as rio
 import rasterio.features
+import shapely
 from scipy.ndimage import (
     binary_dilation,
     binary_erosion,
@@ -124,6 +129,9 @@ def _fill_polygon_depths(
     bounds: tuple[float, float, float, float],
     res: int,
     dtype,
+    gdf_points: gpd.GeoDataFrame | None = None,
+    depth_range_threshold: float = 20.0,
+    min_points: int = 5,
 ) -> np.ndarray:
     """Fill each polygon's pixels using a distance-transform interpolation.
 
@@ -135,6 +143,11 @@ def _fill_polygon_depths(
     Polygons whose reference edge cannot be found fall back to ``outer_edge``
     (degrades to constant midpoint when both edges are absent).
 
+    When *gdf_points* is provided, polygons whose depth range exceeds
+    *depth_range_threshold* and whose minimum depth is shallow (< 15 m) are
+    filled using point-based RBF interpolation instead, falling back to the
+    distance-transform for cells that the RBF cannot cover.
+
     Returns
     -------
     depth_out : float ndarray, shape out_shape
@@ -143,6 +156,12 @@ def _fill_polygon_depths(
     minx, _miny, _maxx, maxy = bounds
     height, width = out_shape
     depth_out = np.full(out_shape, np.nan, dtype=dtype)
+
+    point_tree = None
+    if gdf_points is not None and len(gdf_points) > 0:
+        point_tree = _build_point_spatial_index(gdf_points)
+
+    n_point_refined = 0
 
     for i, geom in enumerate(gdf.geometry):
         min_d = float(min_vals[i])
@@ -157,6 +176,21 @@ def _fill_polygon_depths(
         m = pid[r0:r1, c0:c1] == i
         if not m.any():
             continue
+
+        # Try point-based interpolation for wide-range polygons
+        if (
+            point_tree is not None
+            and _needs_point_refinement(geom.area, min_d, max_d, depth_range_threshold)
+        ):
+            pt_vals = _fill_polygon_from_points(
+                geom, gdf_points, point_tree,
+                min_d, max_d, m, r0, c0, bounds, res, dtype,
+                min_points=min_points,
+            )
+            if pt_vals is not None:
+                depth_out[r0:r1, c0:c1][m] = pt_vals
+                n_point_refined += 1
+                continue
 
         sb_b = shallow_bound[r0:r1, c0:c1] & m
         db_b = deep_bound   [r0:r1, c0:c1] & m
@@ -178,7 +212,67 @@ def _fill_polygon_depths(
 
         depth_out[r0:r1, c0:c1][m] = min_d + (max_d - min_d) * t[m]
 
+    if n_point_refined:
+        print(f"  Point-refined {n_point_refined} wide-range polygons.")
+
     return depth_out
+
+
+def _needs_point_refinement(
+    area: float,
+    min_d: float,
+    max_d: float,
+    depth_range_threshold: float,
+) -> bool:
+    """Return True if a polygon would benefit from point-based depth."""
+    return (max_d - min_d) > depth_range_threshold and min_d < 15
+
+
+def _build_point_spatial_index(gdf_points: gpd.GeoDataFrame) -> shapely.STRtree:
+    """Build STRtree from point geometries for fast spatial queries."""
+    return shapely.STRtree(gdf_points.geometry.values)
+
+
+def _fill_polygon_from_points(
+    geom,
+    gdf_points: gpd.GeoDataFrame,
+    point_tree: shapely.STRtree,
+    min_d: float,
+    max_d: float,
+    mask: np.ndarray,
+    r0: int,
+    c0: int,
+    bounds: tuple[float, float, float, float],
+    res: int,
+    dtype,
+    min_points: int = 5,
+) -> np.ndarray | None:
+    """Interpolate depth within a polygon using measured point data.
+
+    Uses scipy RBFInterpolator with a thin-plate-spline kernel, clipped
+    to the polygon's min/max depth range.  Returns None if fewer than
+    *min_points* fall inside the polygon.
+    """
+    from scipy.interpolate import RBFInterpolator
+
+    hit_idx = point_tree.query(geom, predicate="intersects")
+    if len(hit_idx) < min_points:
+        return None
+
+    pts = gdf_points.iloc[hit_idx]
+    coords = np.column_stack([pts.geometry.x, pts.geometry.y])
+    depths = pts["dybde"].to_numpy(dtype=np.float64)
+
+    rows, cols = np.nonzero(mask)
+    minx, _miny, _maxx, maxy = bounds
+    px = minx + (c0 + cols + 0.5) * res
+    py = maxy - (r0 + rows + 0.5) * res
+    grid_coords = np.column_stack([px, py])
+
+    rbf = RBFInterpolator(coords, depths, kernel="thin_plate_spline", smoothing=1.0)
+    interp = rbf(grid_coords).astype(dtype)
+    interp = np.clip(interp, min_d, max_d)
+    return interp
 
 
 def _smooth_polygon_boundaries(
@@ -223,6 +317,9 @@ def interpolate_depth_raster(
     res: int = 50,
     dtype=np.float32,
     depth_atol: float = 0.01,
+    gdf_points: gpd.GeoDataFrame | None = None,
+    depth_range_threshold: float = 20.0,
+    min_points: int = 5,
 ) -> np.ndarray:
     """Interpolate depth between matching polygon boundaries.
 
@@ -252,6 +349,16 @@ def interpolate_depth_raster(
     ----------
     depth_atol :
         Absolute tolerance for matching neighbour depth values (default 0.01 m).
+    gdf_points :
+        Optional GeoDataFrame of measured depth points (columns: ``dybde``,
+        ``geometry``).  When provided, wide-range polygons are refined using
+        point-based RBF interpolation.
+    depth_range_threshold :
+        Minimum ``maksimumsdybde - minimumsdybde`` (metres) for a polygon to
+        qualify for point-based refinement (default 20).
+    min_points :
+        Minimum number of measured points inside a polygon required to use
+        the RBF interpolator (default 5).
     """
     minx, miny, maxx, maxy = bounds
     width  = int(round((maxx - minx) / res))
@@ -271,6 +378,9 @@ def interpolate_depth_raster(
     depth_out = _fill_polygon_depths(
         gdf, pid, shallow_bound, deep_bound, outer_edge,
         min_vals, max_vals, out_shape, bounds, res, dtype,
+        gdf_points=gdf_points,
+        depth_range_threshold=depth_range_threshold,
+        min_points=min_points,
     )
 
     return _smooth_polygon_boundaries(depth_out, pid, out_shape)

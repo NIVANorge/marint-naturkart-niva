@@ -87,7 +87,8 @@ def build(
     valid_mask: np.ndarray,
     res: int = 50,
     dtype=np.float32,
-    inspect: bool = False
+    inspect: bool = False,
+    gdf_points: gpd.GeoDataFrame | None = None,
 ) -> tuple:
     transform, out_shape, bounds = to_raster_shapes(gdf_sea_map, res)
 
@@ -96,7 +97,9 @@ def build(
     arrays = len(DEPTH_NAMES) * [None]
 
     print("Computing interpolated depth raster...")
-    interp_depth = subkart.features.interpolate_depth_raster(gdf_sea_map, bounds, res, dtype)
+    interp_depth = subkart.features.interpolate_depth_raster(
+        gdf_sea_map, bounds, res, dtype, gdf_points=gdf_points,
+    )
 
     for name in SEA_MAP_NAMES:
         print(f"Preparing {name}...")

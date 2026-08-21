@@ -70,6 +70,8 @@ postprocess = "papermill notebooks/04_substrat_postprocess.ipynb notebooks/04_su
 validate = "papermill notebooks/05_substrat_validate.ipynb notebooks/05_substrat_validate.ipynb"
 install-kernel = "python scripts/install_kernel.py"
 dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features.ipynb"
+prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
+prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"

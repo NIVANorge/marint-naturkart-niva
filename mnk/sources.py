@@ -137,6 +137,42 @@ def prepare_torrfall():
         gdf_torrfall.to_parquet(output_path, compression="snappy")
 
 
+def prepare_depth_point_data():
+    """Extract Dybdepunkt point layer from GML files.
+
+    These are measured depth soundings that are more accurate than the
+    min/max ranges on the Dybdeareal polygons, especially for large
+    polygons with wide depth ranges.  Output is saved as geoparquet
+    per region.
+    """
+    for region in FYLKER:
+        gml_path = Path(__file__).resolve().parent.parent / f"geonorge/Basisdata_{region}_25833_Dybdedata_GML.gml"
+        output_path = Path(__file__).resolve().parent.parent / Path(
+            f"geonorge/Basisdata_{region}_25833_Dybdepunkt.geo.parquet"
+        )
+
+        gdf = gpd.read_file(gml_path, layer="Dybdepunkt", columns=["dybde"])
+        gdf = gdf[["dybde", "geometry"]]
+        gdf.to_parquet(output_path, compression="snappy")
+        print(f"  {region}: {len(gdf)} depth points -> {output_path}")
+
+
+
+def depth_point_data(fylker: list[str] = FYLKER) -> gpd.GeoDataFrame:
+    """Read prepared depth point data for the given fylker.
+
+    Returns a GeoDataFrame with columns ``dybde`` and ``geometry`` (points).
+    """
+    county_files = []
+    for f in fylker:
+        code = next((c for c in FYLKER if c.endswith(f)))
+        path = f"gs://niva-geodata/MarintNaturKart/input/kartverket/Basisdata_{code}_25833_Dybdepunkt.geo.parquet"
+        county_files.append(path)
+
+    gdfs = [gpd.read_parquet(p) for p in county_files]
+    return gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
+
+
 def prepare_sea_basis_depth_data():
     """Prepare basis depth data for processing.
 
@@ -155,7 +191,7 @@ def prepare_sea_basis_depth_data():
         gdf_torrfall["minimumsdybde"] = 0
         gdf_torrfall["maksimumsdybde"] = 0.5
         gdf = pd.concat([gdf, gdf_torrfall], ignore_index=True)
-        gdf = subkart.utils.dissolve_geometries(gdf, by_col="minimumsdybde")
+       
         gdf.to_parquet(output_path, compression="snappy")
         print(f"Written GeoParquet to {output_path}")
 
