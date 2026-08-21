@@ -9,6 +9,7 @@ from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
 import mnk.substrat as subkart
+import mnk
 
 
 def random_search(X_train, y_train, X_val, y_val, classes, class_weights):
@@ -389,7 +390,7 @@ def assign_region_labels(coords_xy, crs: str = "EPSG:25833"):
     import geopandas as gpd
     from shapely.geometry import Point
 
-    mv = subkart.sources.marine_vanntyper().to_crs(crs)
+    mv = mnk.sources.marine_vanntyper().to_crs(crs)
     mv_dissolved = mv[["Region", "geometry"]].dissolve(by="Region").reset_index()
 
     points = gpd.GeoDataFrame(

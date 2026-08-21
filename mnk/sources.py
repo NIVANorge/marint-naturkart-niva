@@ -10,7 +10,7 @@ import shapely
 import rasterio as rio
 from shapely import union_all
 
-import mnk.substrat as subkart
+import mnk
 import geoutils as gu
 
 FYLKER = [
@@ -232,7 +232,7 @@ def prepare_mv_aoi():
     crs = "EPSG:25833"
 
     geoms = np.concatenate([
-        subkart.sources.marine_vanntyper().to_crs(crs).geometry.values,
+        mnk.sources.marine_vanntyper().to_crs(crs).geometry.values,
         gpd.read_parquet("gs://niva-geodata/MarintNaturKart/aux/aoi_missing.geo.parquet").to_crs(crs).geometry.values,
     ])
     geoms = shapely.make_valid(geoms)

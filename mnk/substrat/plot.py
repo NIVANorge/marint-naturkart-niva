@@ -123,7 +123,7 @@ def spatial_errors(
         coarsened cell) to stay within this bound. Left untouched (native resolution)
         when the data's extent is small enough.
     region_gdf : GeoDataFrame, optional
-        Region polygons (e.g. ``subkart.sources.marine_vanntyper()`` dissolved by
+        Region polygons (e.g. ``mnk.sources.marine_vanntyper()`` dissolved by
         ``"Region"``) drawn as a translucent overlay with boundaries and labels, so
         errors can be related to marine vanntyper regions. If omitted, no polygons are
         drawn.
