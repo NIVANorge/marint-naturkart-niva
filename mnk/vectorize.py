@@ -172,7 +172,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 
 
-def pad_nodata(arr: np.ndarray, nodata: int = 255) -> np.ndarray:
+def pad_nodata(arr: np.ndarray, nodata: int | float = 255) -> np.ndarray:
     """Dilate valid pixels by 1 pixel into nodata, filling with nearest value.
 
     This ensures vectorized polygons extend slightly beyond the data boundary
