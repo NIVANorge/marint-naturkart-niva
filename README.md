@@ -1,8 +1,8 @@
 # marint-naturkart-niva
 
-Code for marine nature mapping project 2025-2026.
+Code for marine nature mapping project 2025–2026.
 
-## Quick Start
+## 🚀 Quick Start
 
 Install dependencies using [pixi](https://pixi.prefix.dev/latest/installation/):
 
@@ -10,16 +10,15 @@ Install dependencies using [pixi](https://pixi.prefix.dev/latest/installation/):
 pixi install
 ```
 
-## Workflow
+## 📓 Notebooks
 
-1. **Labelling** - Extract training labels from NGU sediment data
-2. **Modelling** - Train XGBoost classifier on bathymetric features
-3. **Prediction** - Generate substrate maps for Norwegian waters
-4. **Validation** - Evaluate model performance
+| Folder | Description |
+| --- | --- |
+| [`01_substrat/`](./notebooks/01_substrat/) | Substrate classification pipeline (labelling → modelling → prediction → validation) |
+| [`02_light_attenuation.ipynb`](./notebooks/02_light_attenuation.ipynb) | Light attenuation / photic zone analysis |
+| [`scratch/`](./notebooks/scratch/) | Exploratory and utility notebooks (test datasets, feature dumps, snippets) |
 
-See [notebooks](./notebooks/) for detailed implementation.
-
-## Visualization
+## 🗺️ Visualization
 
 View results at [terriamap.p.niva.no](https://terriamap.p.niva.no/#share=g-654c56fd422dcc340046eeb6a81a57c4)
 
