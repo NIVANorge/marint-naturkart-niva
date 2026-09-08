@@ -3,6 +3,12 @@ import rasterio as rio
 
 BUNNTYPE_MAPPING = {"løsbunn": 0, "blanding": 1, "fastbunn": 2}
 
+LM_DK_MAP = {
+    "løsbunn": "DK_AB, DK_C, DK_D",
+    "blanding": "DK_0",
+    "fastbunn": "DK_EFGY",
+}
+
 
 def rasterize_bunn_type(gdf, out_shape, transform):
     shapes = [
