@@ -72,6 +72,7 @@ install-kernel = "python scripts/install_kernel.py"
 dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features.ipynb"
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
 prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
+pmtiles-substrat = "bash scripts/pyramids.sh"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
@@ -82,4 +83,13 @@ pytest = ">=9.0.2,<10"
 papermill = ">=2.7.0,<3"
 grass = ">=8"
 rasterstats = ">=0.19"
+
+[tool.pixi.target.linux-64.dependencies]
+tippecanoe = ">=2.70"
+
+[tool.pixi.target.osx-64.dependencies]
+tippecanoe = ">=2.70"
+
+[tool.pixi.target.osx-arm64.dependencies]
+tippecanoe = ">=2.70"
 
