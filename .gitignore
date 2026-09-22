@@ -24,3 +24,7 @@ niva/**
 poetry.lock
 snowflake.log
 *.pmtiles
+*.csv
+notebooks/scratch/areal_above_25m_bunntype_lmdk.md
+notebooks/scratch/areal_above_30m_bunntype_lmdk.md
+notebooks/scratch/areal_norge.md
