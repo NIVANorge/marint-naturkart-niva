@@ -28,3 +28,6 @@ snowflake.log
 notebooks/scratch/areal_above_25m_bunntype_lmdk.md
 notebooks/scratch/areal_above_30m_bunntype_lmdk.md
 notebooks/scratch/areal_norge.md
+docs/docx/
+docs/html/
+.gitignore
