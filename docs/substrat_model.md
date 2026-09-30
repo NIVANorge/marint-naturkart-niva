@@ -81,10 +81,14 @@ details are given in Appendix C.
 
 # Results
 
+## Model performance
 
-![Predicted substrate map for the Norwegian coastal zone (soft / mixture / hard).](../figures/map.png)
+The subsections below describe the model itself: how it was trained,
+how well it fits the held-out data, which features drive its
+decisions, and how it performs across marine water-type regions and
+independent monitoring stations.
 
-## Training data composition
+### Training data composition
 
 After rasterising the labels and stacking the nine features, valid
 training samples span all six Miljødirektoratet marine water-type
@@ -104,7 +108,7 @@ during training:
 | mixture | 2.170  |
 | hard    | 1.365  |
 
-## Hyperparameter selection
+### Hyperparameter selection
 
 The XGBoost randomised search under spatial Leave-One-Region-Out
 cross-validation selected the following hyperparameters:
@@ -137,7 +141,7 @@ predictions are stronger than predictions in entirely unseen regions.
 The near-zero train/validation gap indicates that within a random
 split the model does not overfit.
 
-## Held-out validation performance
+### Held-out validation performance
 
 On the 20 % held-out validation set (n = 1 154 800 cells), overall
 accuracy is **0.7395** (853 923 correct predictions).
@@ -168,7 +172,7 @@ and, more rarely, into hard. Hard recall is 0.80. Mixture has the
 lowest precision (0.51) because it sits between the two dominant
 classes and absorbs boundary cells.
 
-## Feature importance
+### Feature importance
 
 Permutation importance on the held-out validation set:
 
@@ -202,7 +206,7 @@ information. The `is_dem` indicator carries almost no importance,
 indicating that the DEM-versus-polygon origin of the depth value does
 not meaningfully change the model's decisions.
 
-## Regional performance
+### Regional performance
 
 Break-down of held-out validation accuracy by marine water-type
 region:
@@ -222,7 +226,9 @@ Region B has the highest accuracy (0.81) and Region N the lowest
 0.74 but its errors are the most polarised (see external validation
 below).
 
-## External validation against monitoring stations
+![Held-out validation accuracy per marine water-type region; labels show accuracy and validation sample count.](../figures/regional_performance.png)
+
+### External validation against monitoring stations
 
 The predicted substrate map was compared against independent NIVA
 Aquamonitor monitoring stations, retrieved as WFS layers from the
@@ -261,7 +267,18 @@ a predicted polygon. The opposite-class error rate is ≈ 17 % at soft
 sites and ≈ 10 % at hard sites; the remainder is classified as the
 intermediate `mixture` class.
 
-## Coastal-shelf area accounting
+## Physical interpretation
+
+Once the model has been validated, its predictions can be combined
+with the same NGU sediment observations that supplied the training
+labels to produce national- and regional-scale summaries of the
+Norwegian coastal seabed. The predicted substrate map for the study
+area is shown below; the coastal-shelf accounting that follows
+quantifies its composition.
+
+![Predicted substrate map for the Norwegian coastal zone (soft / mixture / hard).](../figures/map.png)
+
+### Coastal-shelf area accounting
 
 Substrate area distribution over the shallow coastal shelf
 (depth ≥ −30 m from mean sea level), by økoregion, using the DEM50
