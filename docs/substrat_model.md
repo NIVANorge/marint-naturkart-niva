@@ -308,6 +308,23 @@ Barentshavet has the largest mixture share (≈ 33 %) and a nearly
 balanced soft/hard split, and Norskehavet is close to the national
 mean.
 
+### Substrate composition of the intertidal (Tørrfall) zone
+
+Overlaying the Tørrfall polygons (Kartverket sjøkart) with the
+predicted substrate map gives the following breakdown of the
+intertidal zone by predicted class:
+
+| Class          | Area (km²) | % of Tørrfall |
+|----------------|-----------:|--------------:|
+| soft           |     448.2  |         23.2  |
+| mixture        |     572.5  |         29.6  |
+| hard           |     875.4  |         45.3  |
+| no prediction  |      36.8  |          1.9  |
+| **total**      | **1 933.0**| **100.0**     |
+
+Of the 1 933 km² of Tørrfall, 45 % is predicted as hard, 30 % as
+mixture and 23 % as soft; 2 % falls outside any predicted polygon.
+
 ## Summary
 
 * Overall held-out pixel accuracy is 0.74. Per-class F1 is 0.80
@@ -329,6 +346,8 @@ mean.
   hard-dominated, Barentshavet has the largest mixture share. Where
   NGU sediment observations overlap the shelf, they are used in place
   of the model prediction.
+* Of the intertidal Tørrfall zone (≈ 1 930 km² nationally), 45 % is
+  predicted as hard, 30 % as mixture and 23 % as soft.
 
 # Appendices
 
