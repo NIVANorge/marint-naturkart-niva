@@ -164,7 +164,7 @@ Confusion matrix (rows = true, columns = predicted):
 | mixture |  16 502 | 143 196 |  17 708 |
 | hard    |  21 151 |  34 322 | 226 448 |
 
-![Confusion matrix (row-normalised) on the held-out validation set.](../figures/confusion_matrix.png)
+![Confusion matrix (row-normalised) on the held-out validation set.](figures/confusion_matrix.png)
 
 The model is highly precise for soft (0.93) but under-recalls it
 (0.70), redistributing some true soft cells into the mixture class
@@ -194,7 +194,7 @@ Permutation importance on the held-out validation set:
 </div>
 <div style="flex:1; min-width:280px;">
 
-![Permutation feature importance on the held-out validation set.](../figures/feature_importance.png)
+![Permutation feature importance on the held-out validation set.](figures/feature_importance.png)
 
 </div>
 </div>
@@ -226,7 +226,7 @@ Region B has the highest accuracy (0.81) and Region N the lowest
 0.74 but its errors are the most polarised (see external validation
 below).
 
-![Held-out validation accuracy per marine water-type region; labels show accuracy and validation sample count.](../figures/regional_performance.png)
+![Held-out validation accuracy per marine water-type region; labels show accuracy and validation sample count.](figures/regional_performance.png)
 
 ### External validation against monitoring stations
 
@@ -276,7 +276,7 @@ Norwegian coastal seabed. The predicted substrate map for the study
 area is shown below; the coastal-shelf accounting that follows
 quantifies its composition.
 
-![Predicted substrate map for the Norwegian coastal zone (soft / mixture / hard).](../figures/map.png)
+![Predicted substrate map for the Norwegian coastal zone (soft / mixture / hard).](figures/map.png)
 
 ### Coastal-shelf area accounting
 
