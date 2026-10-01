@@ -72,9 +72,7 @@ install-kernel = "python scripts/install_kernel.py"
 dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features.ipynb"
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
 prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
-pmtiles-substrat = "bash scripts/pyramids.sh"
-docs-docx = "bash -c 'mkdir -p docs/docx && for f in docs/*.md; do out=\"docs/docx/$(basename \"${f%.md}\").docx\"; pandoc \"$f\" -o \"$out\" && python scripts/fix_docx_tables.py \"$out\"; done'"
-docs-html = "bash -c 'mkdir -p docs/html && for f in docs/*.md; do pandoc \"$f\" --standalone --embed-resources --metadata title=\"$(basename \"${f%.md}\")\" -H scripts/pandoc_html_style.html -o \"docs/html/$(basename \"${f%.md}\").html\"; done'"
+pmtiles = "bash scripts/pyramids.sh"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
