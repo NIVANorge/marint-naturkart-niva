@@ -216,7 +216,7 @@ def prepare_land_data():
     
     print(f"Written GeoPackage to {output_path}")
 
-
+bunnsedimenter-kornstoerrelse-detaljert, DEM50, Sjøkart-Dybdedata, NIVAs Bølgemodell
 def prepare_bunnsediment_kornstor_detalj():
     """Prepare bunnsediment kornstor detalj data for processing.
 
