@@ -172,33 +172,44 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 
 
-def pad_nodata(arr: np.ndarray, nodata: int | float = 255) -> np.ndarray:
-    """Dilate valid pixels by 1 pixel into nodata, filling with nearest value.
+def pad_nodata(arr: np.ndarray, nodata: int | float = 255, iterations: int = 1) -> np.ndarray:
+    """Dilate valid pixels outward into nodata, filling with nearest value.
 
     This ensures vectorized polygons extend slightly beyond the data boundary
     so that land subtraction cleanly removes coastal edges.
 
     Uses shifted arrays to find neighbor values without allocating full-size
     index arrays (memory-efficient for large rasters).
+
+    Parameters
+    ----------
+    iterations :
+        Number of 1-pixel rings to grow. One ring equals 50 m at the reference
+        resolution, so to preserve a constant physical padding at another
+        resolution use ``round(50 / res)`` (e.g. 5 at 10 m).
     """
-    valid_mask = arr != nodata
-    boundary = binary_dilation(valid_mask) & ~valid_mask
     padded = arr.copy()
 
-    # Fill boundary pixels by checking shifted neighbors (8-connected)
-    unfilled = boundary.copy()
-    for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
-        if not unfilled.any():
+    for _ in range(max(1, iterations)):
+        valid_mask = padded != nodata
+        boundary = binary_dilation(valid_mask) & ~valid_mask
+        if not boundary.any():
             break
-        # Shift valid_mask and arr to align neighbors
-        src_slice_r = slice(max(0, dr), arr.shape[0] + min(0, dr))
-        src_slice_c = slice(max(0, dc), arr.shape[1] + min(0, dc))
-        dst_slice_r = slice(max(0, -dr), arr.shape[0] + min(0, -dr))
-        dst_slice_c = slice(max(0, -dc), arr.shape[1] + min(0, -dc))
 
-        can_fill = unfilled[dst_slice_r, dst_slice_c] & valid_mask[src_slice_r, src_slice_c]
-        padded[dst_slice_r, dst_slice_c][can_fill] = arr[src_slice_r, src_slice_c][can_fill]
-        unfilled[dst_slice_r, dst_slice_c][can_fill] = False
+        # Fill boundary pixels by checking shifted neighbors (8-connected)
+        unfilled = boundary.copy()
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)]:
+            if not unfilled.any():
+                break
+            # Shift valid_mask and arr to align neighbors
+            src_slice_r = slice(max(0, dr), padded.shape[0] + min(0, dr))
+            src_slice_c = slice(max(0, dc), padded.shape[1] + min(0, dc))
+            dst_slice_r = slice(max(0, -dr), padded.shape[0] + min(0, -dr))
+            dst_slice_c = slice(max(0, -dc), padded.shape[1] + min(0, -dc))
+
+            can_fill = unfilled[dst_slice_r, dst_slice_c] & valid_mask[src_slice_r, src_slice_c]
+            padded[dst_slice_r, dst_slice_c][can_fill] = padded[src_slice_r, src_slice_c][can_fill]
+            unfilled[dst_slice_r, dst_slice_c][can_fill] = False
 
     return padded
 

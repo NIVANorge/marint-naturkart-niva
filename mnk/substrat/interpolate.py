@@ -25,6 +25,13 @@ from scipy.ndimage import (
     gaussian_filter,
 )
 
+REFERENCE_RESOLUTION = 50
+"""Resolution (m) that the pixel-based heuristics were tuned for.
+
+Used to rescale pixel-unit parameters (e.g. smoothing sigma) so their physical
+footprint is preserved when running at a different ``res``.
+"""
+
 
 def _shift_pid(pid: np.ndarray, height: int, width: int, di: int, dj: int) -> np.ndarray:
     """Return *pid* shifted by (*di*, *dj*), filling vacated edges with -1."""
@@ -292,7 +299,8 @@ def _smooth_polygon_boundaries(
     ----------
     sigma :
         Standard deviation (in pixels) of the Gaussian kernel (default 1.5,
-        i.e. ~75 m at the standard 50 m resolution).
+        i.e. ~75 m at the standard 50 m resolution). Callers should scale this
+        by ``REFERENCE_RESOLUTION / res`` to keep a constant physical footprint.
     """
     height, width = out_shape
     valid_out = np.isfinite(depth_out)
@@ -378,4 +386,7 @@ def interpolate_depth_raster(
         min_points=min_points,
     )
 
-    return _smooth_polygon_boundaries(depth_out, pid, out_shape)
+    # Scale the Gaussian smoothing band so its physical extent (~75 m at the
+    # 50 m reference) is preserved at other resolutions.
+    smooth_sigma = 1.5 * (REFERENCE_RESOLUTION / res)
+    return _smooth_polygon_boundaries(depth_out, pid, out_shape, sigma=smooth_sigma)

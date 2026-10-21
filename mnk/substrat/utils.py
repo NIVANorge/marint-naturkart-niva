@@ -264,23 +264,30 @@ def sieve_prediction_3class(
     nodata: int = 255,
     prob_threshold: float = 0.60,
     block_size: int = 256,
+    res: int = 50,
 ) -> None:
     """Sieve isolated pixels in the 3-class prediction raster in-place (no remap).
 
-    Uses ``gdal.SieveFilter`` (threshold=2, 4-connected) to identify isolated pixels, then
+    Uses ``gdal.SieveFilter`` (4-connected) to identify isolated pixels, then
     only accepts the sieved value where the probability of the *original* predicted class
     (looked up from the matching band of the 3-band probability raster) is below
     *prob_threshold*. Output raster preserves all three classes (0/1/2).
 
+    The sieve size threshold is an *area* (pixel count); it is scaled from the
+    2-pixel value tuned at the 50 m reference resolution by ``(50 / res) ** 2`` so
+    the minimum retained feature area stays roughly constant in square metres.
+
     Bands of ``prob_file``: 1 → P(class 0), 2 → P(class 1), 3 → P(class 2).
     """
+    sieve_threshold = max(1, round(2 * (subkart.features.RESOLUTION / res) ** 2))
     driver = gdal.GetDriverByName("GTiff")
 
     src_ds = gdal.Open(predict_file_unmapped)
     sieved_tmp = predict_file + ".sieved.tmp.tif"
     sieved_ds = driver.CreateCopy(sieved_tmp, src_ds, options=GTIFF_OPTIONS)
     gdal.SieveFilter(
-        src_ds.GetRasterBand(1), None, sieved_ds.GetRasterBand(1), threshold=2, connectedness=4
+        src_ds.GetRasterBand(1), None, sieved_ds.GetRasterBand(1),
+        threshold=sieve_threshold, connectedness=4,
     )
     sieved_ds.FlushCache()
     sieved_ds = None
