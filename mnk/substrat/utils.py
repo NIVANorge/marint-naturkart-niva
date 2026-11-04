@@ -183,6 +183,58 @@ def create_probability_raster(
     to_cog(tmp_path, prob_file_processed)
 
 
+def calibrate_probability_raster(
+    prob_file: str,
+    calibrators,
+    out_file: str,
+) -> None:
+    """Apply per-class isotonic calibration to a 3-band probability raster.
+
+    ``calibrators`` is a list of fitted ``IsotonicRegression`` objects (one per
+    band, in band order 1→P(0), 2→P(1), 3→P(2)), as produced by
+    ``subkart.training.fit_probability_calibrators``. Each band is remapped by
+    its calibrator block-by-block and the three calibrated bands are then
+    renormalised to sum to 1 per pixel. Nodata pixels are preserved.
+
+    This only changes probabilities; it does not touch the class raster
+    (``predict_unmapped.tif``), so predicted classes remain the raw argmax.
+    """
+    n_bands = len(calibrators)
+    with rio.open(prob_file) as src:
+        if src.count != n_bands:
+            raise ValueError(f"Expected {n_bands} bands to match calibrators, got {src.count}")
+        profile = src.profile.copy()
+        nodata = src.nodata
+
+        with rio.open(out_file, "w", **profile) as dst:
+            for _, win in src.block_windows(1):
+                bands = [src.read(b, window=win).astype(np.float32) for b in range(1, n_bands + 1)]
+                if nodata is not None:
+                    valid = np.ones(bands[0].shape, dtype=bool)
+                    for arr in bands:
+                        valid &= arr != nodata
+                else:
+                    valid = np.ones(bands[0].shape, dtype=bool)
+
+                calibrated = []
+                for arr, iso in zip(bands, calibrators):
+                    out = arr.copy()
+                    if valid.any():
+                        out[valid] = iso.predict(arr[valid]).astype(np.float32)
+                    calibrated.append(out)
+
+                denom = np.zeros(bands[0].shape, dtype=np.float32)
+                for arr in calibrated:
+                    denom = denom + np.where(valid, arr, 0.0)
+                safe = valid & (denom > 0)
+                for b, arr in enumerate(calibrated, start=1):
+                    out = arr.copy()
+                    out[safe] = arr[safe] / denom[safe]
+                    if nodata is not None:
+                        out[~valid] = nodata
+                    dst.write(out.astype(profile["dtype"]), b, window=win)
+
+
 def filter_isolated_pixels(
     predict_file_remapped: str,
     prob_file_processed: str,

@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
 
+import joblib
 import numpy as np
 from scipy.stats import randint, uniform
 from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.isotonic import IsotonicRegression
 from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold, cross_validate, train_test_split
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
@@ -401,3 +403,42 @@ def assign_region_labels(coords_xy, crs: str = "EPSG:25833"):
     # sjoin can produce duplicates if a point falls in overlapping polygons — keep first
     labels = joined.groupby(level=0)["Region"].first().reindex(range(len(points))).fillna("unknown").to_numpy()
     return labels
+
+
+def fit_probability_calibrators(classifier, X_val, y_val, classes):
+    """Fit per-class one-vs-rest isotonic calibrators on a held-out set.
+
+    Does not modify or refit ``classifier``. Returns one
+    ``IsotonicRegression`` per entry in ``classes`` (aligned with
+    ``classifier.classes_`` / the band order of the probability raster),
+    mapping raw ``predict_proba`` values to calibrated probabilities.
+
+    Fit this on the random train/val hold-out (``X_val``/``y_val``); the
+    probabilities are calibrated for the nationwide pixel distribution, so a
+    spatial hold-out region is not appropriate here.
+    """
+    classes = list(classes)
+    P_val = classifier.predict_proba(X_val)
+    y_val = np.asarray(y_val)
+    calibrators = []
+    for k, cls in enumerate(classes):
+        target = (y_val == cls).astype(np.float64)
+        iso = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+        iso.fit(P_val[:, k], target)
+        calibrators.append(iso)
+    return calibrators
+
+
+def calibrators_path() -> Path:
+    return subkart.utils.model_dir_path() / "isotonic_calibrators.joblib"
+
+
+def save_calibrators(calibrators, path: Path = None) -> Path:
+    path = path or calibrators_path()
+    joblib.dump(calibrators, path)
+    return path
+
+
+def load_calibrators(path: Path = None):
+    path = path or calibrators_path()
+    return joblib.load(path)
