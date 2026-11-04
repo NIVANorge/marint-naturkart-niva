@@ -75,6 +75,46 @@ def to_raster_shapes(gdf: gpd.GeoDataFrame, res: int = 50):
     return transform, out_shape, snapped_bounds
 
 
+def terrain_attributes_on_grid(
+    dem_native: xdem.DEM,
+    transform,
+    out_shape: tuple,
+    crs,
+    dtype=np.float32,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute slope and curvature at the DEM's native resolution, then
+    reproject the attribute rasters onto the target grid.
+
+    Computing terrain attributes directly on a coarse DEM that has been
+    upsampled to a finer grid inflates slope/curvature (interpolation seams)
+    and shifts them off the scale the classifier was trained on (50 m).
+    Deriving the attributes at native resolution first, then resampling the
+    smooth attribute rasters (bilinear), preserves that scale.
+    """
+    native_res = float(dem_native.res[0])
+    slope_n, curv_n = xdem.terrain.get_terrain_attribute(
+        dem_native.data, resolution=native_res, attribute=["slope", "curvature"]
+    )
+    slope_src = np.ma.filled(slope_n, np.nan).astype(np.float32)
+    curv_src = np.ma.filled(curv_n, np.nan).astype(np.float32)
+
+    slope_dst = np.full(out_shape, np.nan, dtype=np.float32)
+    curv_dst = np.full(out_shape, np.nan, dtype=np.float32)
+    for src, dst in ((slope_src, slope_dst), (curv_src, curv_dst)):
+        rio.warp.reproject(
+            source=src,
+            destination=dst,
+            src_transform=dem_native.transform,
+            src_crs=dem_native.crs,
+            dst_transform=transform,
+            dst_crs=crs,
+            src_nodata=np.nan,
+            dst_nodata=np.nan,
+            resampling=rio.warp.Resampling.bilinear,
+        )
+    return slope_dst.astype(dtype, copy=False), curv_dst.astype(dtype, copy=False)
+
+
 def build(
     dem: xdem.DEM,
     gdf_sea_map: gpd.GeoDataFrame,
@@ -84,6 +124,7 @@ def build(
     dtype=np.float32,
     inspect: bool = False,
     gdf_points: gpd.GeoDataFrame | None = None,
+    dem_native: xdem.DEM | None = None,
 ) -> tuple:
     transform, out_shape, bounds = to_raster_shapes(gdf_sea_map, res)
 
@@ -116,11 +157,19 @@ def build(
             arrays[DEPTH_NAMES.index("is_dem")] = np.isfinite(depth).astype(dtype, copy=False)
 
         elif name == "sea_avg_slope":
-            slope, curvature = xdem.terrain.get_terrain_attribute(
-                dem.data,
-                resolution=res,
-                attribute=["slope", "curvature"],
-            )
+            if dem_native is not None:
+                # Option A: derive slope/curvature at the DEM's native resolution,
+                # then resample onto the target grid (avoids upsampling artefacts
+                # and keeps the 50 m scale the classifier was trained on).
+                slope, curvature = terrain_attributes_on_grid(
+                    dem_native, transform, out_shape, gdf_sea_map.crs, dtype
+                )
+            else:
+                slope, curvature = xdem.terrain.get_terrain_attribute(
+                    dem.data,
+                    resolution=res,
+                    attribute=["slope", "curvature"],
+                )
             # Derive slope from the interpolated depth gradient as a per-cell fallback,
             # falling back further to the flat per-polygon estimate where depth is NaN.
             dy, dx = np.gradient(np.where(np.isnan(interp_depth), 0.0, interp_depth.astype(np.float64)), res)

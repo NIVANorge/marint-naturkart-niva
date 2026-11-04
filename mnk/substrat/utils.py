@@ -49,7 +49,21 @@ def load_classifier():
     return classifier
 
 
-def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25833"):
+def resample_dem(
+    dem: xdem.DEM,
+    out_shape: tuple,
+    transform: tuple,
+    crs="EPSG:25833",
+    resampling: rio.warp.Resampling = rio.warp.Resampling.bilinear,
+):
+    """Resample a DEM onto a target grid.
+
+    When upsampling a coarse DEM (e.g. the 50 m national DEM onto a 10 m grid),
+    prefer ``Resampling.cubic_spline``: bilinear introduces slope/curvature
+    discontinuities at every source node, which inflate the DEM-derived slope
+    and curvature features. Cubic resampling is C1-continuous and avoids those
+    artefacts. The default stays bilinear so existing products are unchanged.
+    """
     dst_array = np.empty(out_shape, dtype=dem.data.dtype)
 
     rio.warp.reproject(
@@ -61,7 +75,7 @@ def resample_dem(dem: xdem.DEM, out_shape: tuple, transform: tuple, crs="EPSG:25
         dst_crs=crs,
         src_nodata=dem.nodata,
         dst_nodata=dem.nodata,
-        resampling=rio.warp.Resampling.bilinear,
+        resampling=resampling,
     )
 
     if dem.nodata is not None:
