@@ -314,7 +314,7 @@ def sieve_prediction_3class(
     prob_file: str,
     predict_file: str,
     nodata: int = 255,
-    prob_threshold: float = 0.60,
+    prob_threshold=0.60,
     block_size: int = 256,
     res: int = 50,
 ) -> None:
@@ -325,12 +325,19 @@ def sieve_prediction_3class(
     (looked up from the matching band of the 3-band probability raster) is below
     *prob_threshold*. Output raster preserves all three classes (0/1/2).
 
+    ``prob_threshold`` is either a single float applied to every class, or a
+    sequence of three floats ``[t_class0, t_class1, t_class2]`` giving a separate
+    threshold per predicted class. Per-class thresholds are useful on the
+    calibrated probability scale, where a fixed raw-scale cutoff maps to very
+    different calibrated values across classes.
+
     The sieve size threshold is an *area* (pixel count); it is scaled from the
     2-pixel value tuned at the 50 m reference resolution by ``(50 / res) ** 2`` so
     the minimum retained feature area stays roughly constant in square metres.
 
     Bands of ``prob_file``: 1 → P(class 0), 2 → P(class 1), 3 → P(class 2).
     """
+    thresholds = np.asarray(np.broadcast_to(prob_threshold, (3,)), dtype=np.float32)
     sieve_threshold = max(1, round(2 * (subkart.features.RESOLUTION / res) ** 2))
     driver = gdal.GetDriverByName("GTiff")
 
@@ -374,7 +381,8 @@ def sieve_prediction_3class(
             p1 = prob_b2.ReadAsArray(x, y, nx, ny).astype(np.float32)
             p2 = prob_b3.ReadAsArray(x, y, nx, ny).astype(np.float32)
             p_orig = np.where(orig == 0, p0, np.where(orig == 1, p1, p2)).astype(np.float32)
-            apply_change = (orig != sieved) & (orig != nodata) & (p_orig < prob_threshold)
+            thr_orig = np.where(orig == 0, thresholds[0], np.where(orig == 1, thresholds[1], thresholds[2]))
+            apply_change = (orig != sieved) & (orig != nodata) & (p_orig < thr_orig)
             pred_out_band.WriteArray(np.where(apply_change, sieved, orig), x, y)
 
     pred_out.FlushCache()
