@@ -142,6 +142,15 @@ def build(
 
         if name == "sea_avg_depth":
             data = interp_depth
+            if dem_native is not None:
+                # Fall back to the polygon mean depth where interpolation left a
+                # gap, so depth (and the slope gradient derived from it) covers
+                # every mapped cell instead of dropping it from valid_mask.
+                poly_depth = subkart.features.rasterize_area(
+                    vec_basis, gdf_sea_map["sea_avg_depth"], bounds, res
+                ).data.data.astype(dtype, copy=False)
+                data = np.where(np.isnan(data), poly_depth, data)
+                interp_depth = data
         else:
             raster = subkart.features.rasterize_area(vec_basis, gdf_sea_map[name], bounds, res)
             data = raster.data.data.astype(dtype, copy=False)
@@ -158,12 +167,21 @@ def build(
 
         elif name == "sea_avg_slope":
             if dem_native is not None:
-                # Option A: derive slope/curvature at the DEM's native resolution,
-                # then resample onto the target grid (avoids upsampling artefacts
-                # and keeps the 50 m scale the classifier was trained on).
+                # Native-scale attributes keep the 50 m scale the classifier trained on.
                 slope, curvature = terrain_attributes_on_grid(
                     dem_native, transform, out_shape, gdf_sea_map.crs, dtype
                 )
+                # Backfill the wider native->grid NaN fringe with on-grid attributes.
+                grid_slope, grid_curv = xdem.terrain.get_terrain_attribute(
+                    dem.data,
+                    resolution=res,
+                    attribute=["slope", "curvature"],
+                )
+                grid_slope = np.ma.filled(grid_slope, np.nan).astype(np.float32)
+                grid_curv = np.ma.filled(grid_curv, np.nan).astype(np.float32)
+                slope = np.where(np.isnan(slope), grid_slope, slope)
+                curvature = np.where(np.isnan(curvature), grid_curv, curvature)
+                del grid_slope, grid_curv
             else:
                 slope, curvature = xdem.terrain.get_terrain_attribute(
                     dem.data,
