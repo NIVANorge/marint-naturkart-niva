@@ -88,6 +88,50 @@ def sea_map_basisdata(fylker: list[str] = FYLKER):
     return gdf_depth
 
 
+def hi_salinity():
+    """Read HI salinity dataset
+
+    https://kartkatalog.geonorge.no/metadata/norfjords160-saltholdighet/590a2f66-8b5d-4014-a7b6-9ffb0cf17dbd
+
+    Direct download of the actual Float32 salinity values (WCS GetCoverage):
+    https://kart.hi.no/mareano/marinegrunnkart_oseanografi/ows?service=WCS&version=2.0.1&request=GetCoverage&coverageId=marinegrunnkart_oseanografi:Norfjords_160_surf_salt_mean_UTM33&format=image/tiff
+    """
+    salinity_path = Path(__file__).resolve().parent.parent / Path(
+        "hi/Norfjords_160_surf_salt_mean_UTM33.tif"
+    )
+    return gu.Raster(str(salinity_path))
+
+
+def prepare_brakkvann():
+    """Prepare brakkvann (brackish water) raster from HI salinity data.
+
+    Reads the HI surface salinity raster via :func:`hi_salinity` and classifies
+    pixels as brakkvann where mean surface salinity is below 18. The result is
+    written as a GeoTIFF with 1 for brakkvann and 0 for not brakkvann.
+    """
+    salinity = hi_salinity()
+
+    data = np.ma.getdata(salinity.data)
+    brakkvann_data = (data < 18).astype(np.uint8)
+
+    invalid = np.ma.getmaskarray(salinity.data)
+    if salinity.nodata is not None:
+        invalid = invalid | (data == salinity.nodata)
+    brakkvann_data[invalid] = 255
+
+    brakkvann = gu.Raster.from_array(
+        np.ma.masked_equal(brakkvann_data, 255),
+        transform=salinity.transform,
+        crs=salinity.crs,
+        nodata=255,
+    )
+
+    output_path = Path(__file__).resolve().parent.parent / Path(
+        "hi/Norfjords_160_surf_salt_mean_UTM33_brakkvann.tif"
+    )
+    brakkvann.save(str(output_path))
+    print(f"Written brakkvann GeoTIFF to {output_path}")
+
 def marine_vanntyper():
     """Read marine vanntyper
 
