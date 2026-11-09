@@ -243,11 +243,14 @@ def compute_photic_zone(
     output_bounds: list[float],
     dem_xsize: int,
     dem_ysize: int,
+    light_percent: float = 1.0,
 ) -> Path:
     """Classify pixels as photic (1), aphotic (0), or nodata (-1).
 
-    The photic depth is ln(100)/Kd490 — pixels shallower than this
-    threshold are classified as photic.
+    The light depth is ln(100 / light_percent) / Kd490 — the depth at
+    which the given fraction of surface light remains. Pixels shallower
+    than this threshold (i.e. the seabed receives at least ``light_percent``
+    of surface light) are classified as photic.
 
     Parameters
     ----------
@@ -256,6 +259,8 @@ def compute_photic_zone(
     out_path : output Int16 GeoTIFF path.
     output_bounds : [xmin, ymin, xmax, ymax] matching the DEM extent.
     dem_xsize, dem_ysize : DEM raster dimensions.
+    light_percent : surface-light percentage reaching the seabed that
+        defines the threshold (default 1.0, i.e. the euphotic/1% depth).
     """
     out_path = Path(out_path)
     tmp_kd_resampled = out_path.parent / "tmp_kd490_dem_res.tif"
@@ -307,7 +312,7 @@ def compute_photic_zone(
 
             block = np.full((rows, cols), -1, dtype=np.int16)
             if valid.any():
-                photic_depth = np.log(100) / kd[valid]
+                photic_depth = np.log(100 / light_percent) / kd[valid]
                 is_photic = depth_abs[valid] < photic_depth
                 block[valid] = np.where(is_photic, 1, 0).astype(np.int16)
                 n_photic += int(is_photic.sum())

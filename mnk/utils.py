@@ -2,8 +2,72 @@
 
 import os
 
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+import shapely
 from osgeo import gdal
 from sqlalchemy import create_engine
+
+
+def grid_subdivide(
+    gdf: gpd.GeoDataFrame,
+    cell: float = 10_000.0,
+    max_vertices: int = 256,
+) -> gpd.GeoDataFrame:
+    """Split only the large polygons into a grid of small pieces.
+
+    Polygons with more than ``max_vertices`` vertices (e.g. a single dissolved
+    mainland) are clipped against a fishnet of square cells, while smaller
+    polygons (islands, skerries) pass through untouched. The union of the
+    output equals the input, so the coastline is preserved exactly — this just
+    tiles the few huge polygons so that downstream per-polygon vector
+    operations such as :func:`mnk.vectorize.subtract_land` only interact with
+    nearby tiles instead of one full-resolution coastline.
+
+    Uses an STRtree plus vectorized GEOS ``intersection`` and skips the many
+    small polygons, which is substantially faster than ``gpd.overlay`` or
+    tiling every geometry.
+
+    Parameters
+    ----------
+    gdf : GeoDataFrame to subdivide.
+    cell : grid cell size in CRS units (default 10 km).
+    max_vertices : polygons with at most this many vertices are left as-is.
+
+    Returns
+    -------
+    GeoDataFrame of exploded polygon pieces (attributes preserved).
+    """
+    geoms = gdf.geometry.to_numpy()
+    is_big = shapely.get_num_coordinates(geoms) > max_vertices
+
+    parts = [gdf.loc[~is_big]]
+    if is_big.any():
+        big = gdf.loc[is_big]
+        big_geoms = geoms[is_big]
+
+        xmin, ymin, xmax, ymax = shapely.total_bounds(big_geoms)
+        xs = np.arange(xmin, xmax + cell, cell)
+        ys = np.arange(ymin, ymax + cell, cell)
+        x0, y0 = (a.ravel() for a in np.meshgrid(xs, ys))
+        boxes = shapely.box(x0, y0, x0 + cell, y0 + cell)
+
+        tree = shapely.STRtree(big_geoms)
+        box_idx, geom_idx = tree.query(boxes, predicate="intersects")
+        clipped = shapely.intersection(big_geoms[geom_idx], boxes[box_idx])
+
+        tiled = big.iloc[geom_idx].reset_index(drop=True)
+        tiled = tiled.set_geometry(gpd.GeoSeries(clipped, crs=gdf.crs))
+        parts.append(tiled)
+
+    out = gpd.GeoDataFrame(
+        pd.concat(parts, ignore_index=True), crs=gdf.crs
+    )
+    out = out[~out.geometry.is_empty & out.geometry.notna()]
+    out = out.explode(index_parts=False).reset_index(drop=True)
+    out = out[out.geom_type.isin(["Polygon", "MultiPolygon"])].reset_index(drop=True)
+    return out
 
 
 def to_filename(ressurstittel, romligutstrekning, ressursdato, referansesystem):
