@@ -73,6 +73,7 @@ postprocess = "papermill notebooks/01_substrat/04_postprocess.ipynb notebooks/01
 validate = "papermill notebooks/01_substrat/05_validate.ipynb notebooks/01_substrat/05_validate.ipynb"
 install-kernel = "python scripts/install_kernel.py"
 dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features.ipynb"
+nisjemodell = "papermill notebooks/03_nisjemodell.ipynb notebooks/03_nisjemodell.ipynb"
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
 prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
 pmtiles = "bash scripts/pyramids.sh"
