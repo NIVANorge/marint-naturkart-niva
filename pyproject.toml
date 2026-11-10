@@ -57,6 +57,9 @@ skip_glob = '^((?!py$).)*$'    # this makes sort all Python files
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
+[tool.pixi.activation.env]
+GS_NO_SIGN_REQUEST = "YES"
+
 [tool.pixi.pypi-dependencies]
 mnk = { path = ".", editable = true }
 geopandas = ">=1"

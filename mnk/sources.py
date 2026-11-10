@@ -8,6 +8,7 @@ from sqlalchemy import union_all
 import xdem
 import shapely
 import rasterio as rio
+import rasterio.warp  # noqa: F401
 from shapely import union_all
 
 import mnk
@@ -102,12 +103,28 @@ def hi_salinity():
     return gu.Raster(str(salinity_path))
 
 
-def prepare_brakkvann():
+SUBSTRAT_PADDED_PATH = (
+    "gs://niva-geodata/MarintNaturKart/results/"
+    "nisjedata-substrat-xgbclassifier_norge_latest_25833_padded.tif"
+)
+"""Padded substrate raster that defines the reference 50 m grid."""
+
+
+def prepare_brakkvann(
+    substrat_padded_path: str = SUBSTRAT_PADDED_PATH,
+    fill_iterations: int = 3,
+):
     """Prepare brakkvann (brackish water) raster from HI salinity data.
 
     Reads the HI surface salinity raster via :func:`hi_salinity` and classifies
-    pixels as brakkvann where mean surface salinity is below 18. The result is
-    written as a GeoTIFF with 1 for brakkvann and 0 for not brakkvann.
+    pixels as brakkvann where mean surface salinity is below 18. Two GeoTIFFs are
+    written, both with 1 for brakkvann and 0 for not brakkvann:
+
+    1. ``Norfjords_160_surf_salt_mean_UTM33_brakkvann.tif`` on the native HI grid.
+    2. ``Norfjords_160_surf_salt_mean_UTM33_brakkvann_50m_filled.tif`` reprojected
+       onto the same 50 m grid as the padded substrate dataset
+       (*substrat_padded_path*) and dilated outward by *fill_iterations* 50 m
+       rings so the coarse brakkvann coverage overlaps the substrate cells.
     """
     salinity = hi_salinity()
 
@@ -126,11 +143,38 @@ def prepare_brakkvann():
         nodata=255,
     )
 
-    output_path = Path(__file__).resolve().parent.parent / Path(
-        "hi/Norfjords_160_surf_salt_mean_UTM33_brakkvann.tif"
-    )
+    hi_dir = Path(__file__).resolve().parent.parent / "hi"
+    output_path = hi_dir / "Norfjords_160_surf_salt_mean_UTM33_brakkvann.tif"
     brakkvann.save(str(output_path))
     print(f"Written brakkvann GeoTIFF to {output_path}")
+
+    filled_path = hi_dir / "Norfjords_160_surf_salt_mean_UTM33_brakkvann_50m_filled.tif"
+    _write_brakkvann_filled(brakkvann_data, salinity, substrat_padded_path, fill_iterations, filled_path)
+    print(f"Written 50 m filled brakkvann GeoTIFF to {filled_path}")
+
+
+def _write_brakkvann_filled(brakkvann_data, salinity, substrat_padded_path, fill_iterations, out_path):
+    """Reproject *brakkvann_data* onto the substrate grid and fill with overlap."""
+    with rio.open(substrat_padded_path) as ref:
+        dst = np.full((ref.height, ref.width), 255, dtype=np.uint8)
+        rio.warp.reproject(
+            source=brakkvann_data,
+            destination=dst,
+            src_transform=salinity.transform,
+            src_crs=salinity.crs,
+            src_nodata=255,
+            dst_transform=ref.transform,
+            dst_crs=ref.crs,
+            dst_nodata=255,
+            resampling=rio.warp.Resampling.nearest,
+        )
+        profile = ref.profile.copy()
+
+    filled = mnk.vectorize.pad_nodata(dst, nodata=255, iterations=fill_iterations)
+
+    profile.update(count=1, dtype="uint8", nodata=255, compress="deflate")
+    with rio.open(out_path, "w", **profile) as dst_ds:
+        dst_ds.write(filled, 1)
 
 def marine_vanntyper():
     """Read marine vanntyper
