@@ -1,1 +1,1 @@
-from mnk import light, sources, utils, vectorize  # noqa: F401
+from mnk import attributes, light, sources, utils, vectorize  # noqa: F401
