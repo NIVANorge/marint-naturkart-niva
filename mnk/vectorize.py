@@ -15,8 +15,10 @@ appended as a row with ``class_int = -1`` (unclassified).
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from pathlib import Path
 
@@ -32,6 +34,63 @@ from shapely.strtree import STRtree
 
 # Douglas-Peucker threshold: collapses 50 m raster staircase steps.
 SMOOTH_THRESHOLD: float = 25.0
+
+# Norwegian baseline + 1 nautical mile boundary used to clip marine products.
+GRUNNLINJE_URL: str = (
+    "/vsicurl/https://storage.googleapis.com/niva-geodata/"
+    "MarintNaturKart/aux/grunnlinje_1nautisk.gpkg"
+)
+
+
+def clip_to_grunnlinje(
+    gdf: gpd.GeoDataFrame,
+    grunnlinje_url: str = GRUNNLINJE_URL,
+    drop_artifact_nulls: bool = True,
+) -> gpd.GeoDataFrame:
+    """Clip polygons to the baseline + 1 nautical mile boundary.
+
+    Removes geometry outside the Norwegian *grunnlinje* + 1 nautical mile line
+    using ``gdal.VectorTranslate(clipSrc=...)``, explodes multiparts and drops
+    empty geometries.
+
+    Parameters
+    ----------
+    gdf :
+        Polygons to clip. Must have a valid CRS matching the clip source.
+    grunnlinje_url :
+        GDAL-readable path/URL to the clip boundary (defaults to the shared
+        remote GeoPackage).
+    drop_artifact_nulls :
+        If True, drop sliver polygons where every non-geometry attribute is
+        null. ``clipSrc`` can emit such rows when the clip line dissects a
+        polygon awkwardly.
+
+    Returns
+    -------
+    GeoDataFrame clipped to the boundary.
+    """
+    attr_cols = [c for c in gdf.columns if c != gdf.geometry.name]
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_in = os.path.join(tmpdir, "clip_in.gpkg")
+        tmp_out = os.path.join(tmpdir, "clip_out.gpkg")
+        gdf.to_file(tmp_in, driver="GPKG", layer="data")
+        gdal.VectorTranslate(
+            tmp_out,
+            tmp_in,
+            options=gdal.VectorTranslateOptions(clipSrc=grunnlinje_url),
+        )
+        clipped = gpd.read_file(tmp_out).explode(index_parts=False).reset_index(drop=True)
+
+    clipped = clipped[~clipped.is_empty].reset_index(drop=True)
+
+    if drop_artifact_nulls:
+        keep_cols = [c for c in attr_cols if c in clipped.columns]
+        if keep_cols:
+            null_mask = clipped[keep_cols].isna().all(axis=1)
+            clipped = clipped[~null_mask].reset_index(drop=True)
+
+    return clipped
 
 
 def with_gdal(input_raster, output_gpkg, epsg_code, nodata=255):
@@ -126,6 +185,7 @@ def with_grass(
     """
     input_raster = Path(input_raster).resolve()
     output_gpkg = Path(output_gpkg).resolve()
+    output_gpkg.parent.mkdir(parents=True, exist_ok=True)
 
     gdal.UseExceptions()
     ds = gdal.Open(str(input_raster))
@@ -134,8 +194,13 @@ def with_grass(
     epsg = osr.SpatialReference(ds.GetProjection()).GetAuthorityCode(None)
     ds = None
 
+    if epsg is None:
+        raise ValueError(
+            f"Could not determine EPSG code from raster projection: {input_raster}"
+        )
+
     print(f"Vectorizing {input_raster.name} (EPSG:{epsg}) …")
-    subprocess.run(
+    proc = subprocess.run(
         [
             "grass",
             "--tmp-project",
@@ -147,8 +212,17 @@ def with_grass(
             str(input_raster),
             str(output_gpkg),
         ],
-        check=True,
+        capture_output=True,
+        text=True,
     )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"GRASS vectorization failed (exit {proc.returncode}) for {input_raster}.\n"
+            f"--- GRASS stdout ---\n{proc.stdout}\n"
+            f"--- GRASS stderr ---\n{proc.stderr}"
+        )
+    if proc.stdout:
+        print(proc.stdout)
 
     print(f"Done → {output_gpkg}")
     return output_gpkg
