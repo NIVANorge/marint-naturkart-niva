@@ -382,3 +382,162 @@ def subtract_land(gdf: gpd.GeoDataFrame, land_gdf: gpd.GeoDataFrame) -> gpd.GeoD
     result["geometry"] = geoms
     result = result[~result.is_empty].reset_index(drop=True)
     return result
+
+
+def subtract_layer(
+    gdf: gpd.GeoDataFrame, clip_gdf: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Subtract ``clip_gdf`` from ``gdf`` via STRtree (fast ``overlay(how="difference")``).
+
+    Only polygons that actually intersect ``clip_gdf`` are recomputed; all
+    others pass through untouched. This is dramatically faster than
+    :func:`geopandas.overlay`, which differences every feature against the full
+    (often huge) union geometry.
+
+    Parameters
+    ----------
+    gdf : GeoDataFrame whose attributes are preserved.
+    clip_gdf : GeoDataFrame whose geometries are removed from ``gdf``.
+
+    Returns
+    -------
+    GeoDataFrame with the same columns as ``gdf``; empty geometries dropped.
+    """
+    geoms = gdf.geometry.values.copy()
+
+    tree = STRtree(clip_gdf.geometry.values)
+    gdf_idxs, clip_idxs = tree.query(geoms, predicate="intersects")
+
+    gdf_to_clip: dict[int, list[int]] = defaultdict(list)
+    for g_i, c_i in zip(gdf_idxs.tolist(), clip_idxs.tolist()):
+        gdf_to_clip[g_i].append(c_i)
+
+    clip_values = clip_gdf.geometry.values
+    for g_i, c_indices in gdf_to_clip.items():
+        clip_union = unary_union(clip_values[c_indices])
+        geoms[g_i] = _to_polygons(geoms[g_i].difference(clip_union))
+
+    result = gdf.copy()
+    result["geometry"] = geoms
+    result = result[~result.is_empty].reset_index(drop=True)
+    return result
+
+
+def intersect_layers(
+    left: gpd.GeoDataFrame, right: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """Pairwise intersection via STRtree (fast ``overlay(how="intersection")``).
+
+    Equivalent to ``geopandas.overlay(left, right, how="intersection",
+    keep_geom_type=True)`` but uses a bulk STRtree query plus vectorised
+    :func:`shapely.intersection`, computing only the geometrically overlapping
+    pairs. Attributes from both layers are carried onto each resulting piece
+    (right-layer column names colliding with the left get a ``_2`` suffix).
+
+    Parameters
+    ----------
+    left, right : GeoDataFrames (must share a CRS).
+
+    Returns
+    -------
+    GeoDataFrame of intersection pieces; non-polygonal and empty parts dropped.
+    """
+    left_geoms = left.geometry.values
+    right_geoms = right.geometry.values
+
+    tree = STRtree(right_geoms)
+    left_idxs, right_idxs = tree.query(left_geoms, predicate="intersects")
+
+    pieces = shapely.intersection(left_geoms[left_idxs], right_geoms[right_idxs])
+    pieces = np.array([_to_polygons(g) for g in pieces], dtype=object)
+
+    left_cols = [c for c in left.columns if c != left.geometry.name]
+    right_cols = [c for c in right.columns if c != right.geometry.name]
+
+    data: dict[str, object] = {}
+    for c in left_cols:
+        data[c] = left[c].values[left_idxs]
+    for c in right_cols:
+        name = f"{c}_2" if c in left_cols else c
+        data[name] = right[c].values[right_idxs]
+
+    result = gpd.GeoDataFrame(data, geometry=pieces, crs=left.crs)
+    result = result[~result.geometry.is_empty & result.geometry.notna()]
+    return result.reset_index(drop=True)
+
+
+def merge_slivers(
+    gdf: gpd.GeoDataFrame,
+    min_area: float,
+    max_thinness: float = 0.1,
+    class_col: str = "nin_int",
+) -> gpd.GeoDataFrame:
+    """Merge thin generalization slivers into their largest same-class neighbour.
+
+    A polygon is treated as a sliver only if it is *both* small (``area <
+    min_area``) *and* shape-degenerate (Polsby-Popper compactness
+    ``4*pi*area/perimeter**2 < max_thinness``). Compact small polygons (narrow
+    coastal fragments, skerries) are therefore kept. Each sliver is dissolved
+    into the largest adjacent polygon sharing the same ``class_col`` value;
+    slivers with no same-class neighbour are left untouched (never dropped).
+
+    Only the sliver subset is processed via a bulk STRtree query, so this is
+    fast even on national datasets.
+
+    Parameters
+    ----------
+    gdf : GeoDataFrame of single-part polygons.
+    min_area : area threshold in CRS units² below which a polygon may be a sliver.
+    max_thinness : compactness threshold (0..1); lower = thinner.
+    class_col : attribute that must match for a merge to happen.
+
+    Returns
+    -------
+    GeoDataFrame with slivers merged; index reset.
+    """
+    area = gdf.geometry.area.values
+    perim = gdf.geometry.length.values
+    with np.errstate(divide="ignore", invalid="ignore"):
+        thinness = np.where(perim > 0, 4.0 * np.pi * area / perim**2, 0.0)
+
+    is_sliver = (area < min_area) & (thinness < max_thinness)
+    if not is_sliver.any():
+        return gdf.reset_index(drop=True)
+
+    sliver_idx = np.flatnonzero(is_sliver)
+    base_idx = np.flatnonzero(~is_sliver)
+    base_geoms = gdf.geometry.values[base_idx]
+    base_classes = gdf[class_col].values[base_idx]
+
+    geoms = gdf.geometry.values.copy()
+    absorbed: list[int] = []
+    additions: dict[int, list[object]] = defaultdict(list)
+
+    tree = STRtree(base_geoms)
+    sliver_geoms = gdf.geometry.values[sliver_idx]
+    s_local, b_local = tree.query(sliver_geoms, predicate="intersects")
+
+    all_classes = gdf[class_col].values
+    base_areas = area[base_idx]
+
+    neighbours: dict[int, list[int]] = defaultdict(list)
+    for s_i, b_i in zip(s_local.tolist(), b_local.tolist()):
+        neighbours[s_i].append(b_i)
+
+    for s_i, b_locals in neighbours.items():
+        g_sliver = int(sliver_idx[s_i])
+        s_class = all_classes[g_sliver]
+        same = [b for b in b_locals if base_classes[b] == s_class]
+        if not same:
+            continue
+        best = max(same, key=lambda b: base_areas[b])
+        additions[int(base_idx[best])].append(geoms[g_sliver])
+        absorbed.append(g_sliver)
+
+    for g_i, parts in additions.items():
+        geoms[g_i] = _to_polygons(unary_union([geoms[g_i], *parts]))
+
+    result = gdf.copy()
+    result["geometry"] = geoms
+    result = result.drop(index=gdf.index[absorbed])
+    return result[~result.is_empty].reset_index(drop=True)
