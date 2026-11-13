@@ -9,6 +9,7 @@ kalkinnhold, rute partitioning) are intentionally omitted.
 from __future__ import annotations
 
 import geopandas as gpd
+import numpy as np
 
 # nin_int (1-12) axes decoded from NIN_INT_MAP in 03_nisjemodell.
 _EUFOTISK = {1, 2, 3, 4, 5, 7, 9, 11}
@@ -25,6 +26,19 @@ NKM_PROSESS: dict[str, str] = {
 
 OPPHAV_KODE = "NKM"
 
+OBS_SUBSTRAT_KILDE = "substrat_kartlagt_ngu"
+
+
+def sannsynlighet_beskrivelse(
+    gdf: gpd.GeoDataFrame,
+    substrat_kilde_col: str = "_substrat_kilde",
+    is_dem_col: str = "_is_dem",
+) -> np.ndarray:
+    """``høy`` for observed substrate, ``medium`` where DEM data exists, else ``lav``."""
+    has_dem = gdf[is_dem_col].fillna(False).astype(bool).to_numpy()
+    is_obs = (gdf[substrat_kilde_col] == OBS_SUBSTRAT_KILDE).to_numpy()
+    return np.where(is_obs, "høy", np.where(has_dem, "medium", "lav"))
+
 
 def add_nkm_attributes(
     gdf: gpd.GeoDataFrame,
@@ -34,11 +48,17 @@ def add_nkm_attributes(
     metode_klassifisering: str = "NKM_regelbasert_dyp",
     extra_datakilde: tuple[str, ...] = ("lys_modellert_copernicus_S3",),
     nk_fid_start: int = 1,
+    is_dem_col: str = "_is_dem",
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf*.
 
-    ``datakilde`` is pipe-joined from the per-polygon substrate source
-    (``substrat_kilde_col``) and *extra_datakilde*.
+    ``datakilde`` is pipe-joined from *extra_datakilde* (e.g. the light
+    source) followed by the per-polygon substrate source
+    (``substrat_kilde_col``), e.g.
+    ``lys_modellert_copernicus_S3|substrat_kartlagt_ngu``.
+
+    ``sannsynlighet_beskrivelse`` is added when both ``substrat_kilde_col``
+    and ``is_dem_col`` exist (see :func:`sannsynlighet_beskrivelse`).
     """
     out = gdf.copy()
     ints = out[nin_int_col]
@@ -56,10 +76,15 @@ def add_nkm_attributes(
     extra = list(extra_datakilde)
     if substrat_kilde_col in out.columns:
         out["datakilde"] = out[substrat_kilde_col].map(
-            lambda s: "|".join([s, *extra]) if isinstance(s, str) else "|".join(extra)
+            lambda s: "|".join([*extra, s]) if isinstance(s, str) else "|".join(extra)
         )
     else:
         out["datakilde"] = "|".join(extra)
+
+    if {substrat_kilde_col, is_dem_col} <= set(out.columns):
+        out["sannsynlighet_beskrivelse"] = sannsynlighet_beskrivelse(
+            out, substrat_kilde_col, is_dem_col
+        )
 
     out["nk_fid"] = [f"NKM-{i:010d}" for i in range(nk_fid_start, nk_fid_start + len(out))]
 
