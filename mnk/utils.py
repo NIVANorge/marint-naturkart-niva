@@ -5,7 +5,11 @@ import os
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import rasterio
 import shapely
+from rasterio.features import rasterize
+from rasterio.windows import Window
+from rasterio.windows import bounds as window_bounds
 from osgeo import gdal
 from sqlalchemy import create_engine
 
@@ -126,3 +130,44 @@ def parquet_to_postgis(parquet_path: str, crs: str = "EPSG:25833"):
     )
 
     print("Table successfully loaded!")
+
+
+def dem_majority(
+    gdf: gpd.GeoDataFrame, dem_path: str, block_rows: int = 1024
+) -> np.ndarray:
+    """True where most of a polygon's pixels in *dem_path* equal 1.
+
+    Polygons are burned as IDs onto the DEM grid in row strips and DEM
+    pixels counted per ID. Polygons covering no pixel centre fall back to
+    the value at their representative point.
+    """
+    n = len(gdf)
+    dem_px = np.zeros(n, dtype=np.int64)
+    all_px = np.zeros(n, dtype=np.int64)
+    with rasterio.open(dem_path) as src:
+        geoms = gdf.geometry.to_crs(src.crs).values
+        tree = shapely.STRtree(geoms)
+        for row0 in range(0, src.height, block_rows):
+            win = Window(0, row0, src.width, min(block_rows, src.height - row0))
+            idx = tree.query(shapely.box(*window_bounds(win, src.transform)))
+            if not len(idx):
+                continue
+            ids = rasterize(
+                zip(geoms[idx], idx + 1),
+                out_shape=(int(win.height), int(win.width)),
+                transform=src.window_transform(win),
+                fill=0,
+                dtype="uint32",
+            )
+            hit = ids > 0
+            poly = ids[hit] - 1
+            all_px += np.bincount(poly, minlength=n)
+            dem_px += np.bincount(poly, weights=src.read(1, window=win)[hit] == 1, minlength=n).astype(np.int64)
+
+        is_dem = dem_px * 2 > all_px
+        tiny = np.flatnonzero(all_px == 0)
+        if len(tiny):
+            pts = gpd.GeoSeries(geoms[tiny], crs=src.crs).representative_point()
+            vals = np.array([v[0] for v in src.sample(zip(pts.x, pts.y))])
+            is_dem[tiny] = vals == 1
+    return is_dem

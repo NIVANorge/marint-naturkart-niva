@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 
 # nin_int (1-12) axes decoded from NIN_INT_MAP in 03_nisjemodell.
 _EUFOTISK = {1, 2, 3, 4, 5, 7, 9, 11}
@@ -29,13 +30,33 @@ OPPHAV_KODE = "NKM"
 OBS_SUBSTRAT_KILDE = "substrat_kartlagt_ngu"
 
 
+def _as_bool(series: pd.Series) -> pd.Series:
+    """Truth-aware coercion to boolean, safe for string ``"False"``/``"True"``.
+
+    Handles real booleans, numerics, and the string representations that
+    GeoPackage produces. Null/unrecognised values become ``False``.
+    """
+    if series.dtype == bool:
+        return series
+    if pd.api.types.is_numeric_dtype(series):
+        return series.fillna(0).astype(bool)
+    normalized = series.astype("string").str.strip().str.lower()
+    return normalized.isin(["true", "1"]).fillna(False)
+
+
 def sannsynlighet_beskrivelse(
     gdf: gpd.GeoDataFrame,
     substrat_kilde_col: str = "_substrat_kilde",
     is_dem_col: str = "_is_dem",
 ) -> np.ndarray:
-    """``høy`` for observed substrate, ``medium`` where DEM data exists, else ``lav``."""
-    has_dem = gdf[is_dem_col].fillna(False).astype(bool).to_numpy()
+    """``høy`` for observed substrate, ``medium`` where DEM data exists, else ``lav``.
+
+    ``is_dem_col`` may be real booleans, numerics, or the strings ``"True"``/
+    ``"False"`` that round-trip through GeoPackage. A plain ``astype(bool)`` is
+    unsafe here because ``bool("False")`` is ``True``; values are therefore
+    parsed truth-aware so string ``"False"`` maps to ``False``.
+    """
+    has_dem = _as_bool(gdf[is_dem_col]).to_numpy()
     is_obs = (gdf[substrat_kilde_col] == OBS_SUBSTRAT_KILDE).to_numpy()
     return np.where(is_obs, "høy", np.where(has_dem, "medium", "lav"))
 
