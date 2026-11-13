@@ -212,17 +212,13 @@ def with_grass(
             str(input_raster),
             str(output_gpkg),
         ],
-        capture_output=True,
-        text=True,
     )
+    # Output is not captured so GRASS progress reaches the terminal.
     if proc.returncode != 0:
         raise RuntimeError(
-            f"GRASS vectorization failed (exit {proc.returncode}) for {input_raster}.\n"
-            f"--- GRASS stdout ---\n{proc.stdout}\n"
-            f"--- GRASS stderr ---\n{proc.stderr}"
+            f"GRASS vectorization failed (exit {proc.returncode}) for {input_raster}; "
+            "see GRASS output above."
         )
-    if proc.stdout:
-        print(proc.stdout)
 
     print(f"Done → {output_gpkg}")
     return output_gpkg
