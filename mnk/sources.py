@@ -196,6 +196,49 @@ def bolge_exposure():
     """
     return gu.Raster("gs://niva-geodata/MarintNaturKart/input/niva/EswmRaster_filled_cog.tif")
 
+def prepare_grid():
+    """Prepare the SSB 1 km statistical grid.
+
+    Converts the national SSB 1 km grid (``SSB_Ruter1km`` layer) from GML to
+    GeoParquet. Data downloaded from Geonorge:
+    https://kartkatalog.geonorge.no/metadata/statistisk-rutenett-1000m/32ac0653-d95c-456e-8f26-54b9a7a3ca9c
+    """
+
+    layer = "SSB_Ruter1km"
+    base = Path(__file__).resolve().parent.parent / "ssb"
+    gml_path = base / "Basisdata_0000_Norge_25833_StatistiskRutenett1km_GML.gml"
+    output_path = base / "Basisdata_0000_Norge_25833_StatistiskRutenett1km.geo.parquet"
+    gdf = gpd.read_file(gml_path, layer=layer)
+    gdf.to_parquet(output_path, compression="snappy")
+    return output_path
+
+
+def prepare_eu_grid():
+    """Prepare the EU reference 1 km grid for Norway.
+
+    Converts the EEA EU reference grid (``NO_1km`` layer, EPSG:3035) from
+    GeoPackage to GeoParquet and derives the ``rute_fkid`` "Rute kode" used by
+    the datamodell (``EofOrigin_km``\\_``NofOrigin_km``, e.g. ``3897_3674``).
+    The original ``CellCode`` (e.g. ``1kmE3897N3674``) is retained.
+
+    Data downloaded from the EEA reference grid:
+    https://www.eea.europa.eu/en/datahub/datahubitem-view/3c362237-daa4-45e2-8c16-aaadfb1a003b
+    """
+
+    layer = "NO_1km"
+    base = Path(__file__).resolve().parent.parent / "eu"
+    gpkg_path = base / "NO_1km.gpkg"
+    output_path = base / "NO_1km.geo.parquet"
+    gdf = gpd.read_file(gpkg_path, layer=layer)
+    gdf["rute_fkid"] = (
+        (gdf["EofOrigin"] // 1000).astype(int).astype(str)
+        + "_"
+        + (gdf["NofOrigin"] // 1000).astype(int).astype(str)
+    )
+    gdf.to_parquet(output_path, compression="snappy")
+    return output_path
+
+
 def prepare_torrfall():
     """Prepare torrfall.
 
