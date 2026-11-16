@@ -22,7 +22,10 @@ _TOERFALL = {1, 2, 3, 4}
 NKM_PROSESS: dict[str, str] = {
     "NA-MA01": "A", "NA-MA02": "A", "NA-MA03": "A",
     "NA-MA04": "A", "NA-MA05": "A", "NA-MA06": "A",
+    "NA-MB02": "B", "NA-MF01": "F",
     "NA-MC01": "C", "NA-MC02": "C", "NA-MC04": "C",
+    "NA-MC08": "C",
+    "NA-MJ01": "J",
 }
 
 OPPHAV_KODE = "NKM"

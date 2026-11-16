@@ -176,6 +176,9 @@ def _write_brakkvann_filled(brakkvann_data, salinity, substrat_padded_path, fill
     with rio.open(out_path, "w", **profile) as dst_ds:
         dst_ds.write(filled, 1)
 
+from mnk.rules import WATER_TYPE_NAMES, WATER_TYPES_OXYGEN_POOR  # noqa: E402,F401
+
+
 def marine_vanntyper():
     """Read marine vanntyper
 

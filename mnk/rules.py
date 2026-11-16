@@ -39,6 +39,8 @@ NIN_NAMES: dict[str, str] = {
     "NA-MC02": "Fast brakkvannsbunn",
     "NA-MC04": "Brakkvanns-sedimentbunn",
     "NA-MF01": "Brakkvanns-undervannseng",
+    "NA-MC08": "Marint bunnsystem preget av oksygenmangel",
+    "NA-MJ01": "Taretrålingsbunn",
 }
 
 
@@ -92,15 +94,25 @@ def classify_nisje(lys: str, salinitet: str, substrat: str, toerfall: str) -> Ni
 # ---------------------------------------------------------------------------
 # A SeaBee class resolves the substrate/vegetation axis and then the NiN type is
 # read from the nisjemodell. Per Tabell/k_nkm_seabee:
-#   * ANGIO  -> undervannseng (vegetation), overrides substrate & tørrfall.
+#   * ANGIO  -> undervannseng (vegetation) on soft bottom; substrat=løst,
+#              overrides the model (fjernmåling trumfer).
 #   * ALGAE/ROCK -> hard substrate ("fast").   (fjernmåling trumfer modell)
 #   * SEDIMENT   -> soft substrate ("løst").   (fjernmåling trumfer modell)
+#   * ANGIO/ALGAE/ROCK/SEDIMENT are also authoritative for lys: the bottom is
+#     observed from satellite, so lys="eufotisk" (fjernmåling trumfer modell).
 #   * DEEP       -> no override; nisjemodellen trumfer fjernmåling (DEEP).
 #   * ANTHRO/TERR_VEG/BEACHCAST -> not a marine habitat (returns ``None``).
 SEABEE_SUBSTRAT_OVERRIDE: dict[str, str] = {
     "ALGAE": "fast",
     "ROCK": "fast",
     "SEDIMENT": "løst",
+}
+# SeaBee classes that are authoritative for the lys axis (bottom is visible).
+SEABEE_LYS_OVERRIDE: dict[str, str] = {
+    "ANGIO": "eufotisk",
+    "ALGAE": "eufotisk",
+    "ROCK": "eufotisk",
+    "SEDIMENT": "eufotisk",
 }
 SEABEE_KEEP_MODEL: frozenset[str] = frozenset({"DEEP"})
 SEABEE_NONMARINE: frozenset[str] = frozenset({"ANTHRO", "TERR_VEG", "BEACHCAST"})
@@ -110,10 +122,10 @@ SEABEE_ANGIO: dict[str, str] = {"salt": "NA-MB02", "brakk": "NA-MF01"}
 
 # Exposed summary of the SeaBee rule semantics (for docs/tests).
 SEABEE_RULES: dict[str, str] = {
-    "ANGIO": "undervannseng (NA-MB02 salt / NA-MF01 brakk), overrides modell",
-    "ALGAE": "substrat=fast, fjernmåling trumfer modell",
-    "ROCK": "substrat=fast, fjernmåling trumfer modell",
-    "SEDIMENT": "substrat=løst, fjernmåling trumfer modell",
+    "ANGIO": "undervannseng (NA-MB02 salt / NA-MF01 brakk), substrat=løst, lys=eufotisk, overrides modell",
+    "ALGAE": "substrat=fast, lys=eufotisk, fjernmåling trumfer modell",
+    "ROCK": "substrat=fast, lys=eufotisk, fjernmåling trumfer modell",
+    "SEDIMENT": "substrat=løst, lys=eufotisk, fjernmåling trumfer modell",
     "DEEP": "ingen overstyring, nisjemodellen trumfer",
     "ANTHRO": "ikke marint habitat",
     "TERR_VEG": "ikke marint habitat",
@@ -138,7 +150,63 @@ def classify_seabee(
         return _t(SEABEE_ANGIO[salinitet])
     if seabee in SEABEE_NONMARINE:
         return None
+    lys = SEABEE_LYS_OVERRIDE.get(seabee, lys)
     if seabee in SEABEE_SUBSTRAT_OVERRIDE:
         substrat = SEABEE_SUBSTRAT_OVERRIDE[seabee]
     # DEEP, None, or unknown -> keep model substrate.
     return classify_nisje(lys, salinitet, substrat, toerfall)
+
+
+# ---------------------------------------------------------------------------
+# 3. nkm_* column values (as written to the dataset) <-> rule tokens
+# ---------------------------------------------------------------------------
+NKM_LYS: dict[str, str] = {"eufotisk": "eufotisk", "afotisk": "afotisk"}
+NKM_SALINITET: dict[str, str] = {"salt": "saltvann", "brakk": "brakkvann"}
+NKM_SUBSTRAT: dict[str, str] = {"fast": "fastbunn", "løst": "loesbunn"}
+NKM_TOERFALL: dict[str, str] = {"innenfor": "toerfall", "utenfor": "permanent_vanndekket"}
+
+
+# ---------------------------------------------------------------------------
+# 4. Direkte datasett (burned in after nisjemodell + SeaBee, in order)
+# ---------------------------------------------------------------------------
+# NyTypologi2022 `Type` -> beskrivelse (MDir WMS-legende).
+WATER_TYPE_NAMES: dict[str, str] = {
+    "01": "Beskyttet fjord/kyst",
+    "01a": "Beskyttet fjord/kyst med oksygenfattig bunnvann",
+    "02": "Beskyttet ferskvannspåvirket fjord/kyst",
+    "02a": "Beskyttet ferskvannspåvirket fjord med oksygenfattig bunnvann",
+    "03": "Sterkt ferskvannspåvirket fjord",
+    "03a": "Sterkt ferskvannspåvirket fjord med oksygenfattig bunnvann",
+    "04": "Moderat eksponert fjord/kyst",
+    "05": "Moderat eksponert ferskvannspåvirket fjord/kyst",
+    "06": "Bølgeeksponert kyst",
+    "07": "Bølgeeksponert ferskvannspåvirket kyst",
+    "08": "Strømrike sund",
+    "09": "Særegen vannforekomst",
+}
+WATER_TYPES_OXYGEN_POOR: list[str] = [k for k in WATER_TYPE_NAMES if k.endswith("a")]
+
+# Applied in order; a later rule overrides an earlier one where they overlap.
+# ``nkm_lys``: restrict to these nkm_lys values (None = all bottom).
+# ``label``: optional name used in the diagram (defaults to the file name).
+DIRECT_RULES: list[dict] = [
+    {
+        "nin_kode_fkid": "NA-MC08",
+        "label": "Marine vanntyper oksygenfattig",
+        "url": "gs://niva-geodata/MarintNaturKart/input/mdir/NyTypologi2022.geo.parquet",
+        "column": "Type",
+        "values": WATER_TYPES_OXYGEN_POOR,
+        "nkm_lys": ["afotisk"],
+        "metode_klassifisering": "NKM_direkte_oksygenmangel",
+        "datakilde": "oksygen_vanntype_mdir_2022",
+    },
+    {
+        "nin_kode_fkid": "NA-MJ01",
+        "url": "gs://niva-geodata/MarintNaturKart/input/niva/taretraling_polygons_2020-2025_2026-11-15.gpkg",
+        "column": None,
+        "values": None,
+        "nkm_lys": None,
+        "metode_klassifisering": "NKM_direkte_taretralingsbunn",
+        "datakilde": "taretraling_niva_2020-2025",
+    },
+]

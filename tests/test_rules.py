@@ -60,3 +60,14 @@ def test_classify_seabee_deep_keeps_model():
 
 def test_classify_seabee_nonmarine_returns_none():
     assert classify_seabee("TERR_VEG", "eufotisk", "salt", "fast", "innenfor") is None
+
+
+@pytest.mark.parametrize("seabee", ["ALGAE", "ROCK", "SEDIMENT", "ANGIO"])
+def test_classify_seabee_overrides_lys(seabee):
+    # Model says afotisk; SeaBee observes the bottom -> eufotisk.
+    res = classify_seabee(seabee, "afotisk", "salt", "løst", "utenfor")
+    assert res[0] in {"NA-MA02", "NA-MA05", "NA-MB02"}
+
+
+def test_classify_seabee_deep_keeps_model_lys():
+    assert classify_seabee("DEEP", "afotisk", "salt", "løst", "utenfor")[0] == "NA-MA06"

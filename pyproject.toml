@@ -77,6 +77,7 @@ nisjemodell = "papermill notebooks/03_nisjemodell.ipynb notebooks/03_nisjemodell
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
 prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
 pmtiles = "bash scripts/pyramids.sh"
+classify-rules = "python scripts/classify_rules_diagram.py --render"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
