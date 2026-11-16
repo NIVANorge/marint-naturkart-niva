@@ -67,7 +67,7 @@ def add_nkm_attributes(
     kode_col: str = "nin_kode_fkid",
     substrat_kilde_col: str = "_substrat_kilde",
     metode_klassifisering: str = "NKM_regelbasert_dyp",
-    extra_datakilde: tuple[str, ...] = ("lys_modellert_copernicus_S3",),
+    extra_datakilde: tuple[str, ...] = ("lys_satellitt_copernicus_multi",),
     nk_fid_start: int = 1,
     is_dem_col: str = "_is_dem",
 ) -> gpd.GeoDataFrame:
@@ -76,7 +76,7 @@ def add_nkm_attributes(
     ``datakilde`` is pipe-joined from *extra_datakilde* (e.g. the light
     source) followed by the per-polygon substrate source
     (``substrat_kilde_col``), e.g.
-    ``lys_modellert_copernicus_S3|substrat_kartlagt_ngu``.
+    ``lys_satellitt_copernicus_multi|substrat_kartlagt_ngu``.
 
     ``sannsynlighet_beskrivelse`` is added when both ``substrat_kilde_col``
     and ``is_dem_col`` exist (see :func:`sannsynlighet_beskrivelse`).
