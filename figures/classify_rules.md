@@ -29,9 +29,9 @@ flowchart TD
     n1 -->|ANTHRO / BEACHCAST / TERR_VEG| n2
     n3{"nkm_salinitet?"}
     n1 -->|ANGIO| n3
-    n4["NA-MB02<br/>Saltvanns-undervannseng<br/>nkm_substrat = loesbunn<br/>nkm_lys = eufotisk"]
+    n4["NA-MB02<br/>Saltvanns-undervannseng<br/>nkm_lys = eufotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = loesbunn<br/>nkm_toerfall = fra nisjemodell"]
     n3 -->|saltvann| n4
-    n5["NA-MF01<br/>Brakkvanns-undervannseng<br/>nkm_substrat = loesbunn<br/>nkm_lys = eufotisk"]
+    n5["NA-MF01<br/>Brakkvanns-undervannseng<br/>nkm_lys = eufotisk<br/>nkm_salinitet = brakkvann<br/>nkm_substrat = loesbunn<br/>nkm_toerfall = fra nisjemodell"]
     n3 -->|brakkvann| n5
     n6["nkm_substrat := fastbunn<br/>nkm_lys := eufotisk"]
     n1 -->|ALGAE / ROCK| n6
@@ -54,21 +54,21 @@ flowchart TD
     n11 -->|fastbunn| n12
     n13{"nkm_toerfall?"}
     n12 -->|eufotisk| n13
-    n14["NA-MA01<br/>Fast saltvanns-fjærebeltebunn"]
+    n14["NA-MA01<br/>Fast saltvanns-fjærebeltebunn<br/>nkm_lys = eufotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = fastbunn<br/>nkm_toerfall = toerfall"]
     n13 -->|toerfall| n14
-    n15["NA-MA02<br/>Eufotisk fast saltvannsbunn"]
+    n15["NA-MA02<br/>Eufotisk fast saltvannsbunn<br/>nkm_lys = eufotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = fastbunn<br/>nkm_toerfall = permanent_vanndekket"]
     n13 -->|permanent_vanndekket| n15
-    n16["NA-MA03<br/>Afotisk fast saltvannsbunn"]
+    n16["NA-MA03<br/>Afotisk fast saltvannsbunn<br/>nkm_lys = afotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = fastbunn<br/>nkm_toerfall = permanent_vanndekket"]
     n12 -->|afotisk| n16
     n17{"nkm_lys?"}
     n11 -->|loesbunn| n17
     n18{"nkm_toerfall?"}
     n17 -->|eufotisk| n18
-    n19["NA-MA04<br/>Fjærebelte-sedimentbunn"]
+    n19["NA-MA04<br/>Fjærebelte-sedimentbunn<br/>nkm_lys = eufotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = loesbunn<br/>nkm_toerfall = toerfall"]
     n18 -->|toerfall| n19
-    n20["NA-MA05<br/>Eufotisk saltvanns-sedimentbunn"]
+    n20["NA-MA05<br/>Eufotisk saltvanns-sedimentbunn<br/>nkm_lys = eufotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = loesbunn<br/>nkm_toerfall = permanent_vanndekket"]
     n18 -->|permanent_vanndekket| n20
-    n21["NA-MA06<br/>Afotisk saltvanns-sedimentbunn"]
+    n21["NA-MA06<br/>Afotisk saltvanns-sedimentbunn<br/>nkm_lys = afotisk<br/>nkm_salinitet = saltvann<br/>nkm_substrat = loesbunn<br/>nkm_toerfall = permanent_vanndekket"]
     n17 -->|afotisk| n21
     n22{"nkm_substrat?"}
     n10 -->|brakkvann| n22
@@ -76,12 +76,12 @@ flowchart TD
     n22 -->|fastbunn| n23
     n24{"nkm_toerfall?"}
     n23 -->|eufotisk| n24
-    n25["NA-MC01<br/>Fast brakkvanns-fjærebeltebunn"]
+    n25["NA-MC01<br/>Fast brakkvanns-fjærebeltebunn<br/>nkm_lys = eufotisk<br/>nkm_salinitet = brakkvann<br/>nkm_substrat = fastbunn<br/>nkm_toerfall = toerfall"]
     n24 -->|toerfall| n25
-    n26["NA-MC02<br/>Fast brakkvannsbunn"]
+    n26["NA-MC02<br/>Fast brakkvannsbunn<br/>nkm_lys = eufotisk / afotisk<br/>nkm_salinitet = brakkvann<br/>nkm_substrat = fastbunn<br/>nkm_toerfall = permanent_vanndekket"]
     n24 -->|permanent_vanndekket| n26
     n23 -->|afotisk| n26
-    n27["NA-MC04<br/>Brakkvanns-sedimentbunn"]
+    n27["NA-MC04<br/>Brakkvanns-sedimentbunn<br/>nkm_lys = eufotisk / afotisk<br/>nkm_salinitet = brakkvann<br/>nkm_substrat = loesbunn<br/>nkm_toerfall = toerfall / permanent_vanndekket"]
     n22 -->|loesbunn| n27
     end
     subgraph DI["4. Direkte datasett (05): setter kun NiN-type, nkm_* uendret"]

@@ -2,7 +2,8 @@
 
 Usage: pixi run classify-rules [--render]
 
-``--render`` also writes figures/classify_rules_samlet.svg via mermaid-cli (``npx mmdc``).
+``--render`` also writes figures/classify_rules_samlet.svg/.png, figures/classify_rules.html
+and installs it as a goose app (~/.local/share/goose/apps/classify-rules.html) via mermaid-cli (``npx mmdc``).
 """
 
 from __future__ import annotations
@@ -79,12 +80,27 @@ class Diagram:
         return "\n".join(["flowchart TD", *self.lines, CLASSDEFS, *cls])
 
 
+AXIS_ORDER = [("nkm_lys", 0, R.NKM_LYS), ("nkm_salinitet", 1, R.NKM_SALINITET),
+              ("nkm_substrat", 2, R.NKM_SUBSTRAT), ("nkm_toerfall", 3, R.NKM_TOERFALL)]
+
+
+def axes_label(rules) -> str:
+    """Resulting nkm_* values for the rule keys leading to a leaf."""
+    out = []
+    for col, idx, vmap in AXIS_ORDER:
+        vals = list(dict.fromkeys(vmap[k[idx]] for k, _ in rules))
+        out.append(f"{col} = {' / '.join(vals)}")
+    return "<br/>" + "<br/>".join(out)
+
+
 def niche_tree(d: Diagram, parent: str, label: str | None, rules=None, depth=0) -> None:
     """Recursively draw NISJE_RULES, collapsing branches with a single outcome."""
     rules = rules if rules is not None else list(R.NISJE_RULES.items())
     codes = {v[0] for _, v in rules}
     if len(codes) == 1:
-        d.edge(parent, d.leaf(codes.pop()), label)
+        code = codes.pop()
+        all_rules = [(k, v) for k, v in R.NISJE_RULES.items() if v[0] == code]
+        d.edge(parent, d.leaf(code, axes_label(all_rules)), label)
         return
     col, idx, vmap = AXES[depth]
     groups: dict[str, list] = defaultdict(list)
@@ -126,7 +142,10 @@ def seabee_step(d: Diagram, start: str) -> tuple[str, list[str]]:
     d.edge(q, s, "ANGIO")
     angio = []
     for sal, code in R.SEABEE_ANGIO.items():
-        extra = f"<br/>nkm_substrat = {R.NKM_SUBSTRAT['løst']}" + (f"<br/>nkm_lys = {lys}" if lys else "")
+        extra = (f"<br/>nkm_lys = {lys or 'fra nisjemodell'}"
+                 f"<br/>nkm_salinitet = {R.NKM_SALINITET[sal]}"
+                 f"<br/>nkm_substrat = {R.NKM_SUBSTRAT['løst']}"
+                 f"<br/>nkm_toerfall = fra nisjemodell")
         leaf = d.leaf(code, extra)
         d.edge(s, leaf, R.NKM_SALINITET[sal])
         angio.append(leaf)
@@ -255,7 +274,7 @@ def build_markdown(blocks: dict[str, str]) -> str:
 def render(blocks: dict[str, str]) -> None:
     npx = shutil.which("npx")
     if not npx:
-        raise SystemExit("npx not found – install Node.js to render SVG")
+        raise SystemExit("npx not found – install Node.js to render SVG/PNG")
     for old in OUT_DIR.glob("classify_rules_*.*"):
         old.unlink()
     with tempfile.TemporaryDirectory() as tmp:
@@ -266,22 +285,125 @@ def render(blocks: dict[str, str]) -> None:
         for key, block in blocks.items():
             src = Path(tmp) / f"{key}.mmd"
             src.write_text(block)
-            for ext, extra in (("svg", []),):
+            # SVG for docs; PNG (white background, 2x) for Teams/Office/chat.
+            for ext, extra in (("svg", []), ("png", ["-s", "3", "-b", "white"])):
                 out = OUT_DIR / f"classify_rules_{key}.{ext}"
                 subprocess.run([npx, "-y", "-p", "@mermaid-js/mermaid-cli", "mmdc", "-q",
                                 "-c", str(cfg), "-i", str(src), "-o", str(out), *extra], check=True)
                 print(f"Wrote {out.relative_to(REPO)}")
 
 
+APP_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Klassifiseringsregler</title>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #fff; }
+    #bar { position: fixed; top: 0; left: 0; right: 0; z-index: 2; display: flex; gap: 6px;
+           align-items: center; padding: 6px 10px; background: #f1f3f5; border-bottom: 1px solid #ccc; }
+    #bar input { flex: 1; max-width: 320px; padding: 4px 6px; }
+    #bar button { padding: 4px 10px; cursor: pointer; }
+    #info { margin-left: auto; color: #555; font-size: 12px; }
+    #view { position: absolute; top: 42px; left: 0; right: 0; bottom: 0; overflow: hidden; cursor: grab; }
+    #view.drag { cursor: grabbing; }
+    #stage { transform-origin: 0 0; }
+    #stage svg { max-width: none !important; height: auto; }
+    .hit rect, .hit polygon, .hit path.basic { stroke: #e03131 !important; stroke-width: 4px !important; }
+  </style>
+  <script type="application/ld+json">
+{
+  "@context": "urn:goose.ai:schema",
+  "@type": "GooseApp",
+  "name": "classify-rules",
+  "description": "Marint Naturkart klassifiseringsregler (generert fra mnk/rules.py)",
+  "width": 1100,
+  "height": 900,
+  "resizable": true
+}
+  </script>
+  <script type="application/x-goose-prd">
+Viser beslutningstreet for Marint Naturkart (figures/classify_rules_samlet.svg).
+Generert av scripts/classify_rules_diagram.py (pixi run classify-rules) – ikke rediger manuelt.
+Zoom med musehjul, dra for å panorere, søk for å utheve noder.
+  </script>
+</head>
+<body>
+  <div id="bar">
+    <button id="fit" title="Tilpass">⤢</button>
+    <button id="in">+</button>
+    <button id="out">−</button>
+    <input id="q" placeholder="Søk, f.eks. NA-MC08, nkm_lys, SEDIMENT">
+    <span id="info">__STAMP__</span>
+  </div>
+  <div id="view"><div id="stage">__SVG__</div></div>
+  <script>
+    const view = document.getElementById('view'), stage = document.getElementById('stage');
+    const svg = stage.querySelector('svg');
+    let s = 1, x = 0, y = 0;
+    const apply = () => stage.style.transform = `translate(${x}px,${y}px) scale(${s})`;
+    const size = () => { const vb = svg.viewBox.baseVal; return [vb.width || svg.clientWidth, vb.height || svg.clientHeight]; };
+    function fit() {
+      const [w, h] = size(); svg.setAttribute('width', w); svg.setAttribute('height', h);
+      s = Math.min(view.clientWidth / w, view.clientHeight / h) * 0.98;
+      x = (view.clientWidth - w * s) / 2; y = 4; apply();
+    }
+    function zoom(f, cx = view.clientWidth / 2, cy = view.clientHeight / 2) {
+      x = cx - (cx - x) * f; y = cy - (cy - y) * f; s *= f; apply();
+    }
+    view.addEventListener('wheel', e => { e.preventDefault();
+      const r = view.getBoundingClientRect(); zoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+    let d = null;
+    view.addEventListener('mousedown', e => { d = [e.clientX - x, e.clientY - y]; view.classList.add('drag'); });
+    window.addEventListener('mouseup', () => { d = null; view.classList.remove('drag'); });
+    window.addEventListener('mousemove', e => { if (d) { x = e.clientX - d[0]; y = e.clientY - d[1]; apply(); } });
+    document.getElementById('fit').onclick = fit;
+    document.getElementById('in').onclick = () => zoom(1.25);
+    document.getElementById('out').onclick = () => zoom(0.8);
+    const nodes = [...svg.querySelectorAll('g.node, g.edgeLabel, g.cluster')];
+    document.getElementById('q').addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase(); let first = null;
+      nodes.forEach(n => { const hit = q && n.textContent.toLowerCase().includes(q);
+        n.classList.toggle('hit', !!hit); n.style.opacity = q && !hit ? 0.35 : 1; if (hit && !first) first = n; });
+      if (first) { const b = first.getBBox(), m = first.getCTM(), sm = svg.getCTM();
+        const px = (m.e - sm.e) / sm.a + b.x + b.width / 2, py = (m.f - sm.f) / sm.d + b.y + b.height / 2;
+        s = Math.max(s, 0.8); x = view.clientWidth / 2 - px * s; y = view.clientHeight / 2 - py * s; apply(); }
+    });
+    window.addEventListener('resize', fit); fit();
+  </script>
+</body>
+</html>
+"""
+
+APP_DIR = Path.home() / ".local/share/goose/apps"
+
+
+def write_app(svg_path: Path) -> None:
+    """Write a goose app embedding the rendered SVG (zoom/pan/search)."""
+    import datetime
+    import re
+
+    svg = re.sub(r"<\?xml[^>]*>", "", svg_path.read_text())
+    stamp = f"Generert {datetime.date.today():%Y-%m-%d} fra mnk/rules.py"
+    html = APP_HTML.replace("__SVG__", svg).replace("__STAMP__", stamp)
+    out = OUT_DIR / "classify_rules.html"
+    out.write_text(html)
+    print(f"Wrote {out.relative_to(REPO)}")
+    if APP_DIR.is_dir():
+        (APP_DIR / "classify-rules.html").write_text(html)
+        print(f"Installed goose app -> {APP_DIR / 'classify-rules.html'}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--render", action="store_true", help="also render SVG via mermaid-cli")
+    ap.add_argument("--render", action="store_true", help="also render SVG/PNG via mermaid-cli")
     args = ap.parse_args()
     blocks = {key: fn() for key, _, fn in DIAGRAMS}
     OUT_MD.write_text(build_markdown(blocks))
     print(f"Wrote {OUT_MD.relative_to(REPO)}")
     if args.render:
         render(blocks)
+        write_app(OUT_DIR / "classify_rules_samlet.svg")
 
 
 if __name__ == "__main__":
