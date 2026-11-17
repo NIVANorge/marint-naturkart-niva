@@ -79,6 +79,7 @@ prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basi
 pmtiles = "bash scripts/pyramids.sh"
 classify-rules = "python scripts/classify_rules_diagram.py --render"
 lyrx = "python scripts/qml_to_lyrx.py"
+mnk-pmtiles = "bash scripts/mnk_pmtiles.sh"
 
 [tool.pixi.dependencies]
 scikit-learn = "==1.7.1"
