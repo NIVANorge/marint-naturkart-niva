@@ -1,0 +1,692 @@
+{
+  "type": "CIMLayerDocument",
+  "version": "3.2.0",
+  "build": 36057,
+  "layers": [
+    "CIMPATH=map/mnk_vector.json"
+  ],
+  "layerDefinitions": [
+    {
+      "type": "CIMFeatureLayer",
+      "name": "mnk_vector",
+      "uRI": "CIMPATH=map/mnk_vector.json",
+      "visibility": true,
+      "showPopups": true,
+      "renderer": {
+        "type": "CIMUniqueValueRenderer",
+        "defaultSymbol": {
+          "type": "CIMSymbolReference",
+          "symbol": {
+            "type": "CIMPolygonSymbol",
+            "symbolLayers": [
+              {
+                "type": "CIMSolidStroke",
+                "enable": false,
+                "width": 0.0,
+                "color": {
+                  "type": "CIMRGBColor",
+                  "values": [
+                    0,
+                    0,
+                    0,
+                    0
+                  ]
+                }
+              },
+              {
+                "type": "CIMSolidFill",
+                "enable": true,
+                "color": {
+                  "type": "CIMRGBColor",
+                  "values": [
+                    200,
+                    200,
+                    200,
+                    100
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "defaultLabel": "Annet / uten nin_kode_fkid",
+        "useDefaultSymbol": true,
+        "fields": [
+          "nin_kode_fkid"
+        ],
+        "groups": [
+          {
+            "type": "CIMUniqueValueGroup",
+            "classes": [
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MA01"
+                    ]
+                  }
+                ],
+                "label": "NA-MA01 Fast saltvanns-fjærebeltebunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            178,
+                            178,
+                            178,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MA02"
+                    ]
+                  }
+                ],
+                "label": "NA-MA02 Eufotisk fast saltvannsbunn (fallback-farge)",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            140,
+                            140,
+                            140,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MA03"
+                    ]
+                  }
+                ],
+                "label": "NA-MA03 Afotisk fast saltvannsbunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            102,
+                            102,
+                            102,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MA04"
+                    ]
+                  }
+                ],
+                "label": "NA-MA04 Fjærebelte-sedimentbunn (fallback-farge)",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            229,
+                            245,
+                            224,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MA05"
+                    ]
+                  }
+                ],
+                "label": "NA-MA05 Eufotisk saltvanns-sedimentbunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            172,
+                            245,
+                            213,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MA06"
+                    ]
+                  }
+                ],
+                "label": "NA-MA06 Afotisk saltvanns-sedimentbunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            91,
+                            168,
+                            158,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MC01"
+                    ]
+                  }
+                ],
+                "label": "NA-MC01 Fast brakkvanns-fjærebeltebunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            140,
+                            107,
+                            177,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MC02"
+                    ]
+                  }
+                ],
+                "label": "NA-MC02 Fast brakkvannsbunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            158,
+                            154,
+                            200,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MC04"
+                    ]
+                  }
+                ],
+                "label": "NA-MC04 Brakkvanns-sedimentbunn",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            199,
+                            233,
+                            192,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MB02"
+                    ]
+                  }
+                ],
+                "label": "NA-MB02 Saltvanns-undervannseng",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            167,
+                            253,
+                            103,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MF01"
+                    ]
+                  }
+                ],
+                "label": "NA-MF01 Brakkvanns-undervannseng (fallback-farge)",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            76,
+                            160,
+                            60,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MC08"
+                    ]
+                  }
+                ],
+                "label": "NA-MC08 Marint bunnsystem preget av oksygenmangel (fallback-farge)",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            139,
+                            58,
+                            58,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              },
+              {
+                "type": "CIMUniqueValueClass",
+                "values": [
+                  {
+                    "type": "CIMUniqueValue",
+                    "fieldValues": [
+                      "NA-MJ01"
+                    ]
+                  }
+                ],
+                "label": "NA-MJ01 Taretrålingsbunn (fallback-farge)",
+                "symbol": {
+                  "type": "CIMSymbolReference",
+                  "symbol": {
+                    "type": "CIMPolygonSymbol",
+                    "symbolLayers": [
+                      {
+                        "type": "CIMSolidStroke",
+                        "enable": false,
+                        "width": 0.0,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            0,
+                            0,
+                            0,
+                            0
+                          ]
+                        }
+                      },
+                      {
+                        "type": "CIMSolidFill",
+                        "enable": true,
+                        "color": {
+                          "type": "CIMRGBColor",
+                          "values": [
+                            232,
+                            163,
+                            61,
+                            100
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                "visible": true
+              }
+            ],
+            "heading": "nin_kode_fkid"
+          }
+        ]
+      }
+    }
+  ]
+}
