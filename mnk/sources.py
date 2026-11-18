@@ -1,5 +1,6 @@
 from logging import root
 from pathlib import Path
+from types import SimpleNamespace
 
 import geopandas as gpd
 import numpy as np
@@ -121,62 +122,102 @@ def prepare_brakkvann(
     written, both with 1 for brakkvann and 0 for not brakkvann:
 
     1. ``Norfjords_160_surf_salt_mean_UTM33_brakkvann.tif`` on the native HI grid.
-    2. ``Norfjords_160_surf_salt_mean_UTM33_brakkvann_50m_filled.tif`` reprojected
-       onto the same 50 m grid as the padded substrate dataset
-       (*substrat_padded_path*) and dilated outward by *fill_iterations* 50 m
-       rings so the coarse brakkvann coverage overlaps the substrate cells.
+    2. ``Norfjords_160_surf_salt_mean_UTM33_brakkvann_50m_filled.tif`` on the
+       same 50 m grid as the padded substrate dataset (*substrat_padded_path*).
+       The continuous salinity is bilinearly interpolated to 50 m *before* the
+       ``< 18`` threshold, so the brakkvann boundary follows the interpolated
+       isohaline instead of the 160 m cell edges. The result is dilated outward
+       by *fill_iterations* 50 m rings so it overlaps the substrate cells.
     """
-    salinity = hi_salinity()
+    # Read with rasterio: geoutils Raster crashes (double free) on this file.
+    salinity_path = Path(__file__).resolve().parent.parent / "hi/Norfjords_160_surf_salt_mean_UTM33.tif"
+    with rio.open(salinity_path) as src:
+        data = src.read(1)
+        salinity = SimpleNamespace(transform=src.transform, crs=src.crs, nodata=src.nodata)
 
-    data = np.ma.getdata(salinity.data)
-    brakkvann_data = (data < 18).astype(np.uint8)
-
-    invalid = np.ma.getmaskarray(salinity.data)
+    invalid = ~np.isfinite(data)
     if salinity.nodata is not None:
-        invalid = invalid | (data == salinity.nodata)
+        invalid |= data == salinity.nodata
+    brakkvann_data = (data < SALINITY_BRAKKVANN_THRESHOLD).astype(np.uint8)
     brakkvann_data[invalid] = 255
-
-    brakkvann = gu.Raster.from_array(
-        np.ma.masked_equal(brakkvann_data, 255),
-        transform=salinity.transform,
-        crs=salinity.crs,
-        nodata=255,
-    )
 
     hi_dir = Path(__file__).resolve().parent.parent / "hi"
     output_path = hi_dir / "Norfjords_160_surf_salt_mean_UTM33_brakkvann.tif"
-    brakkvann.save(str(output_path))
+    with rio.open(
+        output_path, "w", driver="GTiff", height=brakkvann_data.shape[0],
+        width=brakkvann_data.shape[1], count=1, dtype="uint8", nodata=255,
+        crs=salinity.crs, transform=salinity.transform, compress="lzw",
+    ) as ds:
+        ds.write(brakkvann_data, 1)
     print(f"Written brakkvann GeoTIFF to {output_path}")
 
     filled_path = hi_dir / "Norfjords_160_surf_salt_mean_UTM33_brakkvann_50m_filled.tif"
-    _write_brakkvann_filled(brakkvann_data, salinity, substrat_padded_path, fill_iterations, filled_path)
+    _write_brakkvann_filled(data, invalid, salinity, substrat_padded_path, fill_iterations, filled_path)
     print(f"Written 50 m filled brakkvann GeoTIFF to {filled_path}")
 
 
-def _write_brakkvann_filled(brakkvann_data, salinity, substrat_padded_path, fill_iterations, out_path):
-    """Reproject *brakkvann_data* onto the substrate grid and fill with overlap."""
+SALINITY_BRAKKVANN_THRESHOLD = 18.0
+"""Mean surface salinity below this value is brakkvann."""
+
+
+def _write_brakkvann_filled(
+    salinity_data,
+    invalid,
+    salinity,
+    substrat_padded_path,
+    fill_iterations,
+    out_path,
+    coast_fill: int = 3,
+):
+    """Interpolate salinity to the substrate grid, threshold and fill with overlap.
+
+    1. Fill *coast_fill* native cells into land with nearest values so the
+       bilinear kernel does not mix in nodata along the coast.
+    2. Reproject salinity (float) bilinearly onto the 50 m reference grid.
+    3. Mask back to the original sea extent (nearest-reprojected validity).
+    4. Threshold ``< SALINITY_BRAKKVANN_THRESHOLD`` -> 1/0 and pad by
+       *fill_iterations* 50 m rings.
+    """
+    sentinel = np.float32(-9999.0)
+    sal = np.where(invalid, sentinel, salinity_data).astype(np.float32)
+    sal = mnk.vectorize.pad_nodata(sal, nodata=sentinel, iterations=coast_fill)
+    valid_src = (~invalid).astype(np.uint8)
+
     with rio.open(substrat_padded_path) as ref:
-        dst = np.full((ref.height, ref.width), 255, dtype=np.uint8)
+        sal_dst = np.full((ref.height, ref.width), sentinel, dtype=np.float32)
         rio.warp.reproject(
-            source=brakkvann_data,
-            destination=dst,
+            source=sal,
+            destination=sal_dst,
             src_transform=salinity.transform,
             src_crs=salinity.crs,
-            src_nodata=255,
+            src_nodata=sentinel,
             dst_transform=ref.transform,
             dst_crs=ref.crs,
-            dst_nodata=255,
+            dst_nodata=sentinel,
+            resampling=rio.warp.Resampling.bilinear,
+        )
+        valid_dst = np.zeros((ref.height, ref.width), dtype=np.uint8)
+        rio.warp.reproject(
+            source=valid_src,
+            destination=valid_dst,
+            src_transform=salinity.transform,
+            src_crs=salinity.crs,
+            dst_transform=ref.transform,
+            dst_crs=ref.crs,
             resampling=rio.warp.Resampling.nearest,
         )
         profile = ref.profile.copy()
 
+    dst = np.full(sal_dst.shape, 255, dtype=np.uint8)
+    ok = (valid_dst == 1) & (sal_dst != sentinel)
+    dst[ok] = (sal_dst[ok] < SALINITY_BRAKKVANN_THRESHOLD).astype(np.uint8)
+    del sal_dst, valid_dst, ok
+
     filled = mnk.vectorize.pad_nodata(dst, nodata=255, iterations=fill_iterations)
 
-    profile.update(count=1, dtype="uint8", nodata=255, compress="deflate")
+    profile.update(count=1, dtype="uint8", nodata=255, compress="lzw")  # deflate crashes (pip pyarrow vs conda GDAL)
     with rio.open(out_path, "w", **profile) as dst_ds:
         dst_ds.write(filled, 1)
-
-from mnk.rules import WATER_TYPE_NAMES, WATER_TYPES_OXYGEN_POOR  # noqa: E402,F401
 
 
 def marine_vanntyper():
