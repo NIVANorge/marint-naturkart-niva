@@ -12,7 +12,7 @@ Rekkefølge (senere steg trumfer tidligere):
 
 Verdier på kantene er verdiene i datasettets `nkm_*`-kolonner.
 
-Direkte datasett setter kun `nin_kode_fkid`/`NiN_name` (+ `nkm_prosess`, `metode_klassifisering`, `datakilde`); `nkm_lys`, `nkm_substrat`, `nkm_salinitet` og `nkm_toerfall` endres ikke. `nkm_lys` brukes kun som filter der regelen angir det.
+Direkte datasett setter kun `nin_kode_fkid`/`NiN_name` (+ `nkm_prosess`, `metode_klassifisering`, `datakilde`); `nkm_lys`, `nkm_substrat`, `nkm_salinitet` og `nkm_toerfall` endres ikke. nkm_* brukes kun som filter der regelen angir det.
 
 ## Samlet beslutningstre
 
@@ -21,7 +21,7 @@ flowchart TD
     subgraph NI["1. Nisjemodell (03)"]
     n0(["Nisjemodell setter<br/>nkm_lys · nkm_substrat · nkm_salinitet · nkm_toerfall"])
     end
-    subgraph FJ["2. Fjernmåling SeaBee (04): erstatter nkm_lys og nkm_substrat"]
+    subgraph FJ["2. Fjernmåling Field (04): erstatter nkm_lys og nkm_substrat"]
     direction TB
     n1{"SeaBee-klasse?"}
     n0 --> n1
@@ -86,7 +86,7 @@ flowchart TD
     end
     subgraph DI["4. Direkte datasett (05): setter kun NiN-type, nkm_* uendret"]
     direction TB
-    n28{"Innenfor Marine vanntyper oksygenfattig<br/>Type ∈ 01a, 02a, 03a<br/>og nkm_lys = afotisk?"}
+    n28{"Innenfor Marine vanntyper oksygenfattig<br/>Type ∈ 01a, 02a, 03a<br/>og nkm_lys = afotisk / eufotisk<br/>og nkm_toerfall = permanent_vanndekket?"}
     n29["NA-MC08<br/>Marint bunnsystem preget av oksygenmangel<br/>prosess C · NKM_direkte_oksygenmangel<br/>nkm_* uendret"]
     n28 -->|ja| n29
     n30{"Innenfor taretraling_polygons_2020-2025_2026-11-15.gpkg?"}
@@ -122,7 +122,7 @@ flowchart TD
     class n29,n31 direkte;
 ```
 
-| nin_kode_fkid | NiN_name | url | utvalg | nkm_lys | metode_klassifisering | datakilde |
+| nin_kode_fkid | NiN_name | url | utvalg | filter nkm_* | metode_klassifisering | datakilde |
 |---|---|---|---|---|---|---|
-| NA-MC08 | Marint bunnsystem preget av oksygenmangel | `gs://niva-geodata/MarintNaturKart/input/mdir/NyTypologi2022.geo.parquet` | `Type` ∈ 01a, 02a, 03a | afotisk | `NKM_direkte_oksygenmangel` | `oksygen_vanntype_mdir_2022` |
+| NA-MC08 | Marint bunnsystem preget av oksygenmangel | `gs://niva-geodata/MarintNaturKart/input/mdir/NyTypologi2022.geo.parquet` | `Type` ∈ 01a, 02a, 03a | `nkm_lys` ∈ afotisk, eufotisk; `nkm_toerfall` ∈ permanent_vanndekket | `NKM_direkte_oksygenmangel` | `oksygen_vanntype_mdir_2022` |
 | NA-MJ01 | Taretrålingsbunn | `gs://niva-geodata/MarintNaturKart/input/niva/taretraling_polygons_2020-2025_2026-11-15.gpkg` | alle | alle | `NKM_direkte_taretralingsbunn` | `taretraling_niva_2020-2025` |

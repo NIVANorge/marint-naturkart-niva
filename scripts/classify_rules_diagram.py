@@ -128,7 +128,7 @@ def seabee_step(d: Diagram, start: str) -> tuple[str, list[str]]:
 
     Returns (node leading into the NiN tree, ANGIO leaves that bypass it).
     """
-    d.lines.append('    subgraph FJ["2. Fjernmåling SeaBee (04): erstatter nkm_lys og nkm_substrat"]')
+    d.lines.append('    subgraph FJ["2. Fjernmåling Field (04): erstatter nkm_lys og nkm_substrat"]')
     d.lines.append("    direction TB")
     q = d.node("SeaBee-klasse?")
     d.edge(start, q)
@@ -181,8 +181,8 @@ def direct_chain(d: Diagram, inputs: list[str]) -> str:
         cond = f"Innenfor {rule.get('label') or Path(rule['url']).name}"
         if rule["column"]:
             cond += f"<br/>{rule['column']} ∈ {', '.join(rule['values'])}"
-        if rule["nkm_lys"]:
-            cond += f"<br/>og nkm_lys = {' / '.join(rule['nkm_lys'])}"
+        for col, vals in (rule["where"] or {}).items():
+            cond += f"<br/>og {col} = {' / '.join(vals)}"
         q = d.node(cond + "?")
         for src, label in incoming:
             d.edge(src, q, label)
@@ -229,11 +229,11 @@ def diagram_combined() -> str:
 
 
 def direct_table() -> str:
-    rows = ["| nin_kode_fkid | NiN_name | url | utvalg | nkm_lys | metode_klassifisering | datakilde |",
+    rows = ["| nin_kode_fkid | NiN_name | url | utvalg | filter nkm_* | metode_klassifisering | datakilde |",
             "|---|---|---|---|---|---|---|"]
     for r in R.DIRECT_RULES:
         sel = f"`{r['column']}` ∈ {', '.join(r['values'])}" if r["column"] else "alle"
-        lys = ", ".join(r["nkm_lys"]) if r["nkm_lys"] else "alle"
+        lys = "; ".join(f"`{c}` ∈ {', '.join(v)}" for c, v in r["where"].items()) if r["where"] else "alle"
         rows.append(f"| {r['nin_kode_fkid']} | {R.NIN_NAMES[r['nin_kode_fkid']]} | `{r['url']}` | "
                     f"{sel} | {lys} | `{r['metode_klassifisering']}` | `{r['datakilde']}` |")
     return "\n".join(rows)
@@ -262,7 +262,7 @@ def build_markdown(blocks: dict[str, str]) -> str:
         "",
         "Direkte datasett setter kun `nin_kode_fkid`/`NiN_name` (+ `nkm_prosess`, "
         "`metode_klassifisering`, `datakilde`); `nkm_lys`, `nkm_substrat`, `nkm_salinitet` "
-        "og `nkm_toerfall` endres ikke. `nkm_lys` brukes kun som filter der regelen angir det.",
+        "og `nkm_toerfall` endres ikke. nkm_* brukes kun som filter der regelen angir det.",
     ]
     for key, title, _ in DIAGRAMS:
         out += ["", f"## {title}", "", "```mermaid", blocks[key], "```"]

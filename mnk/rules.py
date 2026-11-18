@@ -187,7 +187,8 @@ WATER_TYPE_NAMES: dict[str, str] = {
 WATER_TYPES_OXYGEN_POOR: list[str] = [k for k in WATER_TYPE_NAMES if k.endswith("a")]
 
 # Applied in order; a later rule overrides an earlier one where they overlap.
-# ``nkm_lys``: restrict to these nkm_lys values (None = all bottom).
+# ``where``: restrict to polygons whose nkm_* columns have these values
+# ({column: [values]}; None = all bottom).
 # ``label``: optional name used in the diagram (defaults to the file name).
 DIRECT_RULES: list[dict] = [
     {
@@ -196,7 +197,10 @@ DIRECT_RULES: list[dict] = [
         "url": "gs://niva-geodata/MarintNaturKart/input/mdir/NyTypologi2022.geo.parquet",
         "column": "Type",
         "values": WATER_TYPES_OXYGEN_POOR,
-        "nkm_lys": ["afotisk"],
+        "where": {
+            "nkm_lys": ["afotisk", "eufotisk"],
+            "nkm_toerfall": ["permanent_vanndekket"],
+        },
         "metode_klassifisering": "NKM_direkte_oksygenmangel",
         "datakilde": "oksygen_vanntype_mdir_2022",
     },
@@ -205,7 +209,7 @@ DIRECT_RULES: list[dict] = [
         "url": "gs://niva-geodata/MarintNaturKart/input/niva/taretraling_polygons_2020-2025_2026-11-15.gpkg",
         "column": None,
         "values": None,
-        "nkm_lys": None,
+        "where": None,
         "metode_klassifisering": "NKM_direkte_taretralingsbunn",
         "datakilde": "taretraling_niva_2020-2025",
     },
