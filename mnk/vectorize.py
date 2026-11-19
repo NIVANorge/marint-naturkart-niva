@@ -537,3 +537,94 @@ def merge_slivers(
     result["geometry"] = geoms
     result = result.drop(index=gdf.index[absorbed])
     return result[~result.is_empty].reset_index(drop=True)
+
+
+def fill_torrfall_gaps(
+    torrfall: gpd.GeoDataFrame,
+    water: gpd.GeoDataFrame,
+    tile_size: float = 5_000.0,
+    margin: float = 1_000.0,
+    max_area: float | None = None,
+    workers: int = 4,
+) -> gpd.GeoDataFrame:
+    """Find water enclosed between tørrfall and land, using a water mask.
+
+    The water mask is cut by the tørrfall polygons (``water − tørrfall``). The
+    open sea stays one large connected piece; *standalone* pieces cut off from
+    it lie between tørrfall and land (or inside tørrfall) and are returned so
+    they can be merged into tørrfall. Nothing seaward is ever added, because
+    the open sea is connected and therefore never standalone.
+
+    Processed in tiles of *tile_size* with *margin* overlap: in each window a
+    piece counts as standalone if it touches tørrfall and does **not** touch
+    the window edge (i.e. it is closed off within the window); it is assigned
+    to the tile containing its representative point, so nothing is counted
+    twice. Standalone pieces wider than *margin* that cross a tile edge are
+    missed; raise *margin* if needed.
+
+    Parameters
+    ----------
+    torrfall : tørrfall polygons.
+    water : water mask polygons (sea, fits the land line), same CRS.
+    tile_size, margin : tiling (CRS units).
+    max_area : optional upper area limit for a standalone piece (m²).
+    workers : threads (shapely releases the GIL).
+
+    Returns
+    -------
+    GeoDataFrame of standalone gap pieces (single polygons).
+    """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    tf_geoms = torrfall.geometry.to_numpy()
+    water_geoms = water.geometry.to_numpy()
+    tf_tree, water_tree = STRtree(tf_geoms), STRtree(water_geoms)
+
+    xmin, ymin, xmax, ymax = shapely.total_bounds(tf_geoms)
+    xs = np.arange(xmin, xmax, tile_size)
+    ys = np.arange(ymin, ymax, tile_size)
+    gx, gy = np.meshgrid(xs, ys)
+    tiles = shapely.box(gx, gy, gx + tile_size, gy + tile_size).ravel()
+    tiles = tiles[np.unique(tf_tree.query(tiles, predicate="intersects")[0])]
+
+    def one_tile(tile):
+        window = shapely.buffer(tile, margin, join_style="mitre")
+        tf_idx = tf_tree.query(window, predicate="intersects")
+        w_idx = water_tree.query(window, predicate="intersects")
+        if len(tf_idx) == 0 or len(w_idx) == 0:
+            return []
+        tf_w = shapely.union_all(shapely.intersection(tf_geoms[tf_idx], window))
+        water_w = shapely.union_all(shapely.intersection(water_geoms[w_idx], window))
+        parts = shapely.get_parts(_to_polygons(shapely.difference(water_w, tf_w)))
+        parts = parts[~shapely.is_empty(parts)]
+        if len(parts) == 0:
+            return []
+        edge = shapely.boundary(window)
+        keep = ~shapely.intersects(parts, edge)
+        keep &= shapely.dwithin(parts, tf_w, 0.01)
+        keep &= shapely.contains(tile, shapely.point_on_surface(parts))
+        if max_area is not None:
+            keep &= shapely.area(parts) <= max_area
+        return list(shapely.to_wkb(parts[keep]))
+
+    n_workers = max(1, workers)
+    print(f"Filling tørrfall gaps: {len(tf_geoms):,} tørrfall, {len(water_geoms):,} water, "
+          f"{len(tiles):,} tiles of {tile_size / 1000:g} km, {n_workers} threads", flush=True)
+    gaps: list[bytes] = []
+    t0 = time.monotonic()
+    step = max(1, len(tiles) // 100)
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        for i, res in enumerate(pool.map(one_tile, tiles), start=1):
+            gaps.extend(res)
+            if i % step == 0 or i == len(tiles):
+                elapsed = time.monotonic() - t0
+                eta = elapsed / i * (len(tiles) - i)
+                print(f"  {i:,}/{len(tiles):,} tiles ({100 * i / len(tiles):.0f}%), "
+                      f"{len(gaps):,} gap pieces, {elapsed / 60:.1f} min elapsed, "
+                      f"~{eta / 60:.1f} min left", flush=True)
+
+    geoms = shapely.from_wkb(gaps) if gaps else np.array([], dtype=object)
+    out = gpd.GeoDataFrame(geometry=geoms, crs=torrfall.crs)
+    print(f"Standalone gap pieces: {len(out):,} ({out.area.sum() / 1e6:,.2f} km²)")
+    return out

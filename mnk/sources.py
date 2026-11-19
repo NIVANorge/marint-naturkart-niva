@@ -359,6 +359,50 @@ def prepare_sea_basis_depth_data():
         print(f"Written GeoParquet to {output_path}")
 
 
+WATER_MASK_PATH = (
+    "field/water-mask-norway_FKB-osm-border-dissolved-fullres_v3-grunnlinje-1-nautisk-mil_25833_20260924.gpkg"
+)
+
+
+def prepare_torrfall_filled(
+    water_path: str = WATER_MASK_PATH,
+    max_area: float | None = None,
+    tile_size: float = 5_000.0,
+    workers: int = 4,
+) -> Path:
+    """Merge water enclosed between tørrfall and land into tørrfall; run once.
+
+    The water mask (fits the land line) is cut by tørrfall; standalone water
+    pieces cut off from the open sea are added to tørrfall
+    (:func:`mnk.vectorize.fill_torrfall_gaps`). Output has a ``_gap`` column
+    (False = original tørrfall, True = added piece).
+
+    Written to ``geonorge/torrfall-filled_norge_25833.geo.parquet``.
+    """
+    crs = "EPSG:25833"
+    root = Path(__file__).resolve().parent.parent
+    print("Reading tørrfall ...", flush=True)
+    torrfall = sea_map_torrfall().to_crs(crs)[["geometry"]].reset_index(drop=True)
+    torrfall["geometry"] = shapely.make_valid(torrfall.geometry.to_numpy())
+    print("Reading water mask ...", flush=True)
+    water = gpd.read_file(root / water_path, columns=[]).to_crs(crs)[["geometry"]]
+
+    gaps = mnk.vectorize.fill_torrfall_gaps(
+        torrfall, water, tile_size=tile_size, max_area=max_area, workers=workers
+    )
+    del water
+    out = gpd.GeoDataFrame(
+        pd.concat([torrfall.assign(_gap=False), gaps.assign(_gap=True)], ignore_index=True),
+        crs=crs,
+    )
+
+    output_path = root / "geonorge/torrfall-filled_norge_25833.geo.parquet"
+    print(f"Writing {output_path} ...", flush=True)
+    out.to_parquet(output_path, compression="snappy")
+    print(f"Written {len(out):,} polygons ({len(gaps):,} added) to {output_path}")
+    return output_path
+
+
 def prepare_land_data():
     """Prepare basis depth data for processing.
 
