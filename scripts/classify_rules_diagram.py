@@ -25,11 +25,17 @@ OUT_MD = OUT_DIR / "classify_rules.md"
 
 # Order of the niche-model axes in the tree: (column, rule-tuple index, value map).
 AXES = [
-    ("nkm_salinitet", 1, R.NKM_SALINITET),
-    ("nkm_substrat", 2, R.NKM_SUBSTRAT),
-    ("nkm_lys", 0, R.NKM_LYS),
-    ("nkm_toerfall", 3, R.NKM_TOERFALL),
+    (R.COL_SALINITET, 1, R.NKM_SALINITET),
+    (R.COL_SUBSTRAT, 2, R.NKM_SUBSTRAT),
+    (R.COL_LYS, 0, R.NKM_LYS),
+    (R.COL_TOERFALL, 3, R.NKM_TOERFALL),
 ]
+NKM_COLS = f"{R.COL_LYS} · {R.COL_SUBSTRAT} · {R.COL_SALINITET} · {R.COL_TOERFALL}"
+
+
+def fmt_code(vmap: dict[str, str], token: str) -> str:
+    """Dataset code for *token*, with the token as explanation."""
+    return f"{vmap[token]} ({token})"
 
 CLASSDEFS = """
     classDef drop fill:#f8d7da,stroke:#c00,color:#600;
@@ -73,22 +79,22 @@ class Diagram:
         return self.leaves[key]
 
     def edge(self, a: str, b: str, label: str | None = None) -> None:
-        self.lines.append(f"    {a} -->|{label}| {b}" if label else f"    {a} --> {b}")
+        self.lines.append(f"    {a} -->|\"{label}\"| {b}" if label else f"    {a} --> {b}")
 
     def render(self) -> str:
         cls = [f"    class {','.join(v)} {k};" for k, v in self.classes.items() if v]
         return "\n".join(["flowchart TD", *self.lines, CLASSDEFS, *cls])
 
 
-AXIS_ORDER = [("nkm_lys", 0, R.NKM_LYS), ("nkm_salinitet", 1, R.NKM_SALINITET),
-              ("nkm_substrat", 2, R.NKM_SUBSTRAT), ("nkm_toerfall", 3, R.NKM_TOERFALL)]
+AXIS_ORDER = [(R.COL_LYS, 0, R.NKM_LYS), (R.COL_SALINITET, 1, R.NKM_SALINITET),
+              (R.COL_SUBSTRAT, 2, R.NKM_SUBSTRAT), (R.COL_TOERFALL, 3, R.NKM_TOERFALL)]
 
 
 def axes_label(rules) -> str:
     """Resulting nkm_* values for the rule keys leading to a leaf."""
     out = []
     for col, idx, vmap in AXIS_ORDER:
-        vals = list(dict.fromkeys(vmap[k[idx]] for k, _ in rules))
+        vals = list(dict.fromkeys(fmt_code(vmap, k[idx]) for k, _ in rules))
         out.append(f"{col} = {' / '.join(vals)}")
     return "<br/>" + "<br/>".join(out)
 
@@ -112,7 +118,7 @@ def niche_tree(d: Diagram, parent: str, label: str | None, rules=None, depth=0) 
     q = d.node(f"{col}?")
     d.edge(parent, q, label)
     for val, sub in groups.items():
-        niche_tree(d, q, vmap[val], sub, depth + 1)
+        niche_tree(d, q, fmt_code(vmap, val), sub, depth + 1)
 
 
 def seabee_groups():
@@ -124,11 +130,11 @@ def seabee_groups():
 
 
 def seabee_step(d: Diagram, start: str) -> tuple[str, list[str]]:
-    """Draw the SeaBee step that replaces nkm_lys / nkm_substrat.
+    """Draw the SeaBee step that replaces the lys / substrat columns.
 
     Returns (node leading into the NiN tree, ANGIO leaves that bypass it).
     """
-    d.lines.append('    subgraph FJ["2. Fjernmåling Field (04): erstatter nkm_lys og nkm_substrat"]')
+    d.lines.append(f'    subgraph FJ["2. Fjernmåling Field (04): erstatter {R.COL_LYS} og {R.COL_SUBSTRAT}"]')
     d.lines.append("    direction TB")
     q = d.node("SeaBee-klasse?")
     d.edge(start, q)
@@ -137,34 +143,35 @@ def seabee_step(d: Diagram, start: str) -> tuple[str, list[str]]:
     d.classes["drop"].append(x)
     d.edge(q, x, " / ".join(sorted(R.SEABEE_NONMARINE)))
 
-    s = d.node("nkm_salinitet?")
+    s = d.node(f"{R.COL_SALINITET}?")
     lys = R.SEABEE_LYS_OVERRIDE.get("ANGIO")
     d.edge(q, s, "ANGIO")
     angio = []
-    for sal, code in R.SEABEE_ANGIO.items():
-        extra = (f"<br/>nkm_lys = {lys or 'fra nisjemodell'}"
-                 f"<br/>nkm_salinitet = {R.NKM_SALINITET[sal]}"
-                 f"<br/>nkm_substrat = {R.NKM_SUBSTRAT['løst']}"
-                 f"<br/>nkm_toerfall = fra nisjemodell")
-        leaf = d.leaf(code, extra)
-        d.edge(s, leaf, R.NKM_SALINITET[sal])
+    for sal, nin in R.SEABEE_ANGIO.items():
+        extra = (f"<br/>{R.COL_LYS} = {fmt_code(R.NKM_LYS, lys) if lys else 'fra nisjemodell'}"
+                 f"<br/>{R.COL_SALINITET} = {fmt_code(R.NKM_SALINITET, sal)}"
+                 f"<br/>{R.COL_SUBSTRAT} = {fmt_code(R.NKM_SUBSTRAT, 'løst')}"
+                 f"<br/>{R.COL_TOERFALL} = fra nisjemodell")
+        leaf = d.leaf(nin, extra)
+        d.edge(s, leaf, fmt_code(R.NKM_SALINITET, sal))
         angio.append(leaf)
 
     outs = []
     for (sub, lys), classes in seabee_groups().items():
         parts = []
         if sub:
-            parts.append(f"nkm_substrat := {R.NKM_SUBSTRAT[sub]}")
+            parts.append(f"{R.COL_SUBSTRAT} := {fmt_code(R.NKM_SUBSTRAT, sub)}")
         if lys:
-            parts.append(f"nkm_lys := {lys}")
-        label = "<br/>".join(parts) if parts else "behold nisjemodellens<br/>nkm_lys og nkm_substrat"
+            parts.append(f"{R.COL_LYS} := {fmt_code(R.NKM_LYS, lys)}")
+        label = ("<br/>".join(parts) if parts
+                 else f"behold nisjemodellens<br/>{R.COL_LYS} og {R.COL_SUBSTRAT}")
         box = d.node(label, "box")
         d.classes["override" if parts else "model"].append(box)
         d.edge(q, box, " / ".join(classes) + ("" if parts else " / ingen fjernmåling"))
         outs.append(box)
     d.lines.append("    end")
 
-    nm_in = d.node("nkm_lys · nkm_substrat · nkm_salinitet · nkm_toerfall", "io")
+    nm_in = d.node(NKM_COLS, "io")
     d.classes["model"].append(nm_in)
     for o in outs:
         d.edge(o, nm_in)
@@ -202,7 +209,7 @@ def direct_chain(d: Diagram, inputs: list[str]) -> str:
 def diagram_combined() -> str:
     d = Diagram()
     d.lines.append('    subgraph NI["1. Nisjemodell (03)"]')
-    start = d.node("Nisjemodell setter<br/>nkm_lys · nkm_substrat · nkm_salinitet · nkm_toerfall", "start")
+    start = d.node(f"Nisjemodell setter<br/>{NKM_COLS}", "start")
     d.classes["model"].append(start)
     d.lines.append("    end")
 
@@ -229,13 +236,13 @@ def diagram_combined() -> str:
 
 
 def direct_table() -> str:
-    rows = ["| nin_kode_fkid | NiN_name | url | utvalg | filter nkm_* | metode_klassifisering | datakilde |",
-            "|---|---|---|---|---|---|---|"]
+    rows = ["| nin_kode_fkid | NiN_name | url | utvalg | filter nkm_* | metode_klassifisering |",
+            "|---|---|---|---|---|---|"]
     for r in R.DIRECT_RULES:
         sel = f"`{r['column']}` ∈ {', '.join(r['values'])}" if r["column"] else "alle"
         lys = "; ".join(f"`{c}` ∈ {', '.join(v)}" for c, v in r["where"].items()) if r["where"] else "alle"
         rows.append(f"| {r['nin_kode_fkid']} | {R.NIN_NAMES[r['nin_kode_fkid']]} | `{r['url']}` | "
-                    f"{sel} | {lys} | `{r['metode_klassifisering']}` | `{r['datakilde']}` |")
+                    f"{sel} | {lys} | `{r['metode_klassifisering']}` |")
     return "\n".join(rows)
 
 
@@ -258,11 +265,11 @@ def build_markdown(blocks: dict[str, str]) -> str:
           for i, r in enumerate(R.DIRECT_RULES, start=3)],
         f"{len(R.DIRECT_RULES) + 3}. Oppdeling i SSB 1 km rutenett → `marint-naturkart` (05)",
         "",
-        "Verdier på kantene er verdiene i datasettets `nkm_*`-kolonner.",
+        "Verdier på kantene er kodene i datasettets `nkm_*`-kolonner (forklaring i parentes).",
         "",
         "Direkte datasett setter kun `nin_kode_fkid`/`NiN_name` (+ `nkm_prosess`, "
-        "`metode_klassifisering`, `datakilde`); `nkm_lys`, `nkm_substrat`, `nkm_salinitet` "
-        "og `nkm_toerfall` endres ikke. nkm_* brukes kun som filter der regelen angir det.",
+        f"`metode_klassifisering`); `{R.COL_LYS}`, `{R.COL_SUBSTRAT}`, `{R.COL_SALINITET}` "
+        f"og `{R.COL_TOERFALL}` endres ikke. nkm_* brukes kun som filter der regelen angir det.",
     ]
     for key, title, _ in DIAGRAMS:
         out += ["", f"## {title}", "", "```mermaid", blocks[key], "```"]

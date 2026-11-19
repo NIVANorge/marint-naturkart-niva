@@ -4,6 +4,10 @@ Populates the subset of ``nin_flate_NK`` fields derivable from ``nin_int``
 (1-12) and ``nin_kode_fkid``. Fields requiring data not available in the
 niche-model notebook (probabilities, uncertainty, alger, SeaBee, depth,
 kalkinnhold, rute partitioning) are intentionally omitted.
+
+Column names and codes follow ``datamodell_silver_nin_flate_NK.xlsx``;
+:data:`DATAMODEL_UPDATE` maps datasets written with the previous attribute
+names/values onto the current data model (see :func:`update_datamodel`).
 """
 
 from __future__ import annotations
@@ -11,6 +15,8 @@ from __future__ import annotations
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+
+import mnk.rules as R
 
 # nin_int (1-12) axes decoded from NIN_INT_MAP in 03_nisjemodell.
 _EUFOTISK = {1, 2, 3, 4, 5, 7, 9, 11}
@@ -31,6 +37,78 @@ NKM_PROSESS: dict[str, str] = {
 OPPHAV_KODE = "NKM"
 
 OBS_SUBSTRAT_KILDE = "substrat_kartlagt_ngu"
+
+# Working columns dropped once their derived attributes are set.
+WORKING_COLS = ("_substrat_kilde", "_is_dem")
+
+# Canonical nin_flate_NK attribute order (nisjemodell output, notebook 03).
+# The geometry column is kept on the GeoDataFrame but is not an attribute.
+NIN_FLATE_COLUMNS: list[str] = [
+    "nk_fid",
+    "opphav_kode",
+    "nin_int",
+    "nin_kode_fkid",
+    "NiN_name",
+    "nkm_prosess",
+    R.COL_LYS,
+    R.COL_SALINITET,
+    R.COL_SUBSTRAT,
+    R.COL_TOERFALL,
+    "metode_klassifisering",
+    "sannsynlighet_beskrivelse",
+]
+
+# Previous attribute set -> current data model.
+# ``columns``: old column -> new column (``None`` = dropped).
+# ``values``: new column -> {old value -> new code}.
+DATAMODEL_UPDATE: dict[str, dict] = {
+    "columns": {
+        "nkm_lys": R.COL_LYS,
+        "nkm_salinitet": R.COL_SALINITET,
+        "nkm_substrat": R.COL_SUBSTRAT,
+        "nkm_toerfall": R.COL_TOERFALL,
+        "datakilde": None,
+    },
+    "values": {
+        R.COL_LYS: {
+            "eufotisk": R.NKM_LYS["eufotisk"],
+            "afotisk": R.NKM_LYS["afotisk"],
+        },
+        R.COL_SALINITET: {
+            "saltvann": R.NKM_SALINITET["salt"],
+            "brakkvann": R.NKM_SALINITET["brakk"],
+        },
+        R.COL_SUBSTRAT: {
+            "fastbunn": R.NKM_SUBSTRAT["fast"],
+            "loesbunn": R.NKM_SUBSTRAT["løst"],
+        },
+        R.COL_TOERFALL: {
+            "toerfall": R.NKM_TOERFALL["innenfor"],
+            "permanent_vanndekket": R.NKM_TOERFALL["utenfor"],
+        },
+    },
+}
+
+
+def update_datamodel(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Convert a dataset with the previous attributes to the current data model.
+
+    Renames/drops columns and recodes values per :data:`DATAMODEL_UPDATE`.
+    Values already in the new codes (or nulls) are left untouched; any other
+    unknown value raises ``ValueError``.
+    """
+    cols = DATAMODEL_UPDATE["columns"]
+    out = gdf.drop(columns=[c for c, new in cols.items() if new is None and c in gdf])
+    out = out.rename(columns={c: new for c, new in cols.items() if new and c in out})
+    for col, mapping in DATAMODEL_UPDATE["values"].items():
+        if col not in out:
+            continue
+        valid = set(mapping) | set(mapping.values())
+        bad = set(out[col].dropna().unique()) - valid
+        if bad:
+            raise ValueError(f"Unknown values in {col!r}: {sorted(bad)}")
+        out[col] = out[col].map(lambda v: mapping.get(v, v))
+    return out
 
 
 def _as_bool(series: pd.Series) -> pd.Series:
@@ -70,40 +148,29 @@ def add_nkm_attributes(
     kode_col: str = "nin_kode_fkid",
     substrat_kilde_col: str = "_substrat_kilde",
     metode_klassifisering: str = "NKM_regelbasert_dyp",
-    extra_datakilde: tuple[str, ...] = ("lys_satellitt_copernicus_multi",),
     nk_fid_start: int = 1,
     is_dem_col: str = "_is_dem",
 ) -> gpd.GeoDataFrame:
-    """Add derived Naturkart attributes to *gdf*.
-
-    ``datakilde`` is pipe-joined from *extra_datakilde* (e.g. the light
-    source) followed by the per-polygon substrate source
-    (``substrat_kilde_col``), e.g.
-    ``lys_satellitt_copernicus_multi|substrat_kartlagt_ngu``.
+    """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
 
     ``sannsynlighet_beskrivelse`` is added when both ``substrat_kilde_col``
-    and ``is_dem_col`` exist (see :func:`sannsynlighet_beskrivelse`).
+    and ``is_dem_col`` exist (see :func:`sannsynlighet_beskrivelse`). Working
+    columns (:data:`WORKING_COLS`) are dropped and the result is reduced to
+    :data:`NIN_FLATE_COLUMNS` (those present, in canonical order).
     """
     out = gdf.copy()
     ints = out[nin_int_col]
 
+    def axis(members: set[int], codes: dict[str, str], yes: str, no: str) -> pd.Series:
+        return ints.map(lambda v: codes[yes] if v in members else codes[no])
+
     out["opphav_kode"] = OPPHAV_KODE
     out["metode_klassifisering"] = metode_klassifisering
-    out["nkm_lys"] = ints.map(lambda v: "eufotisk" if v in _EUFOTISK else "afotisk")
-    out["nkm_salinitet"] = ints.map(lambda v: "brakkvann" if v in _BRAKKVANN else "saltvann")
-    out["nkm_substrat"] = ints.map(lambda v: "fastbunn" if v in _FASTBUNN else "loesbunn")
-    out["nkm_toerfall"] = ints.map(
-        lambda v: "toerfall" if v in _TOERFALL else "permanent_vanndekket"
-    )
+    out[R.COL_LYS] = axis(_EUFOTISK, R.NKM_LYS, "eufotisk", "afotisk")
+    out[R.COL_SALINITET] = axis(_BRAKKVANN, R.NKM_SALINITET, "brakk", "salt")
+    out[R.COL_SUBSTRAT] = axis(_FASTBUNN, R.NKM_SUBSTRAT, "fast", "løst")
+    out[R.COL_TOERFALL] = axis(_TOERFALL, R.NKM_TOERFALL, "innenfor", "utenfor")
     out["nkm_prosess"] = out[kode_col].map(NKM_PROSESS)
-
-    extra = list(extra_datakilde)
-    if substrat_kilde_col in out.columns:
-        out["datakilde"] = out[substrat_kilde_col].map(
-            lambda s: "|".join([*extra, s]) if isinstance(s, str) else "|".join(extra)
-        )
-    else:
-        out["datakilde"] = "|".join(extra)
 
     if {substrat_kilde_col, is_dem_col} <= set(out.columns):
         out["sannsynlighet_beskrivelse"] = sannsynlighet_beskrivelse(
@@ -112,4 +179,6 @@ def add_nkm_attributes(
 
     out["nk_fid"] = [f"NKM-{i:010d}" for i in range(nk_fid_start, nk_fid_start + len(out))]
 
-    return out
+    out = out.drop(columns=[c for c in WORKING_COLS if c in out.columns])
+    keep = [c for c in NIN_FLATE_COLUMNS if c in out.columns] + [out.geometry.name]
+    return out[keep]

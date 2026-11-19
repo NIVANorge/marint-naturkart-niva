@@ -158,12 +158,21 @@ def classify_seabee(
 
 
 # ---------------------------------------------------------------------------
-# 3. nkm_* column values (as written to the dataset) <-> rule tokens
+# 3. nkm_* columns and their codes (as written to the dataset) <-> rule tokens
 # ---------------------------------------------------------------------------
-NKM_LYS: dict[str, str] = {"eufotisk": "eufotisk", "afotisk": "afotisk"}
-NKM_SALINITET: dict[str, str] = {"salt": "saltvann", "brakk": "brakkvann"}
-NKM_SUBSTRAT: dict[str, str] = {"fast": "fastbunn", "løst": "loesbunn"}
-NKM_TOERFALL: dict[str, str] = {"innenfor": "toerfall", "utenfor": "permanent_vanndekket"}
+# One row per axis: (column name in nin_flate_NK, {rule token -> NiN kode}),
+# from TABELL nin_flate_NK / KODE k_nkm_<..>. Edit codes here.
+NKM: dict[str, tuple[str, dict[str, str]]] = {
+    "lys":       ("nkm_lys",   {"eufotisk": "0abcde", "afotisk": "y"}),
+    "salinitet": ("nkm_lm-sa", {"salt": "fgh", "brakk": "abcde"}),
+    "substrat":  ("nkm_lm-dk", {"fast": "EFGY", "løst": "0ABCD"}),
+    "toerfall":  ("nkm_lm-tv", {"innenfor": "LM-TV_abcdefgh", "utenfor": "LM-TV_0"}),
+}
+
+COL_LYS, NKM_LYS = NKM["lys"]
+COL_SALINITET, NKM_SALINITET = NKM["salinitet"]
+COL_SUBSTRAT, NKM_SUBSTRAT = NKM["substrat"]
+COL_TOERFALL, NKM_TOERFALL = NKM["toerfall"]
 
 
 # ---------------------------------------------------------------------------
@@ -198,11 +207,10 @@ DIRECT_RULES: list[dict] = [
         "column": "Type",
         "values": WATER_TYPES_OXYGEN_POOR,
         "where": {
-            "nkm_lys": ["afotisk", "eufotisk"],
-            "nkm_toerfall": ["permanent_vanndekket"],
+            COL_LYS: [NKM_LYS["afotisk"], NKM_LYS["eufotisk"]],
+            COL_TOERFALL: [NKM_TOERFALL["utenfor"]],
         },
         "metode_klassifisering": "NKM_direkte_oksygenmangel",
-        "datakilde": "oksygen_vanntype_mdir_2022",
     },
     {
         "nin_kode_fkid": "NA-MJ01",
@@ -211,6 +219,5 @@ DIRECT_RULES: list[dict] = [
         "values": None,
         "where": None,
         "metode_klassifisering": "NKM_direkte_taretralingsbunn",
-        "datakilde": "taretraling_niva_2020-2025",
     },
 ]
