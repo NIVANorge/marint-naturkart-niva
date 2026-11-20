@@ -348,13 +348,31 @@ def _to_polygons(geom):
     )
 
 
-def subtract_land(gdf: gpd.GeoDataFrame, land_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+def _map(fn, items, workers):
+    """Apply ``fn`` to ``items``, threaded when ``workers > 1`` (GEOS frees the GIL)."""
+    items = list(items)
+    if workers and workers > 1 and len(items) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            yield from pool.map(fn, items)
+    else:
+        yield from map(fn, items)
+
+
+def subtract_land(
+    gdf: gpd.GeoDataFrame, land_gdf: gpd.GeoDataFrame, workers: int = 4
+) -> gpd.GeoDataFrame:
     """Subtract land polygons from a GeoDataFrame using STRtree bulk query.
+
+    The per-polygon union+difference runs across ``workers`` threads (GEOS
+    releases the GIL).
 
     Parameters
     ----------
     gdf : GeoDataFrame with polygons to clip.
     land_gdf : GeoDataFrame with land polygons to subtract.
+    workers : threads for the per-polygon loop (1 = serial).
 
     Returns
     -------
@@ -370,9 +388,15 @@ def subtract_land(gdf: gpd.GeoDataFrame, land_gdf: gpd.GeoDataFrame) -> gpd.GeoD
         gdf_to_land[g_i].append(l_i)
 
     print(f"Subtracting land from {len(gdf_to_land):,} of {len(geoms):,} polygons...")
-    for g_i, l_indices in gdf_to_land.items():
-        land_union = unary_union(land_gdf.geometry.iloc[l_indices].values)
-        geoms[g_i] = _to_polygons(geoms[g_i].difference(land_union))
+    land_values = land_gdf.geometry.values
+    work = [(g_i, geoms[g_i], land_values[l_idx]) for g_i, l_idx in gdf_to_land.items()]
+
+    def _diff(item):
+        g_i, geom, land = item
+        return g_i, _to_polygons(geom.difference(shapely.union_all(land)))
+
+    for g_i, geom in _map(_diff, work, workers):
+        geoms[g_i] = geom
 
     result = gdf.copy()
     result["geometry"] = geoms
@@ -381,7 +405,7 @@ def subtract_land(gdf: gpd.GeoDataFrame, land_gdf: gpd.GeoDataFrame) -> gpd.GeoD
 
 
 def subtract_layer(
-    gdf: gpd.GeoDataFrame, clip_gdf: gpd.GeoDataFrame
+    gdf: gpd.GeoDataFrame, clip_gdf: gpd.GeoDataFrame, workers: int = 4
 ) -> gpd.GeoDataFrame:
     """Subtract ``clip_gdf`` from ``gdf`` via STRtree (fast ``overlay(how="difference")``).
 
@@ -390,10 +414,14 @@ def subtract_layer(
     :func:`geopandas.overlay`, which differences every feature against the full
     (often huge) union geometry.
 
+    The per-polygon union+difference is the dominant cost at national scale, so
+    it is run across ``workers`` threads (GEOS releases the GIL).
+
     Parameters
     ----------
     gdf : GeoDataFrame whose attributes are preserved.
     clip_gdf : GeoDataFrame whose geometries are removed from ``gdf``.
+    workers : threads for the per-polygon loop (1 = serial).
 
     Returns
     -------
@@ -409,9 +437,16 @@ def subtract_layer(
         gdf_to_clip[g_i].append(c_i)
 
     clip_values = clip_gdf.geometry.values
-    for g_i, c_indices in gdf_to_clip.items():
-        clip_union = unary_union(clip_values[c_indices])
-        geoms[g_i] = _to_polygons(geoms[g_i].difference(clip_union))
+    # Precompute (index, geometry, clip geometries) so worker threads never touch
+    # the shared `geoms` array; results are written back on the main thread.
+    work = [(g_i, geoms[g_i], clip_values[c_idx]) for g_i, c_idx in gdf_to_clip.items()]
+
+    def _diff(item):
+        g_i, geom, clips = item
+        return g_i, _to_polygons(geom.difference(shapely.union_all(clips)))
+
+    for g_i, geom in _map(_diff, work, workers):
+        geoms[g_i] = geom
 
     result = gdf.copy()
     result["geometry"] = geoms
@@ -627,4 +662,78 @@ def fill_torrfall_gaps(
     geoms = shapely.from_wkb(gaps) if gaps else np.array([], dtype=object)
     out = gpd.GeoDataFrame(geometry=geoms, crs=torrfall.crs)
     print(f"Standalone gap pieces: {len(out):,} ({out.area.sum() / 1e6:,.2f} km²)")
+    return out
+
+
+def coverage_gaps(
+    water: gpd.GeoDataFrame,
+    coverage: gpd.GeoDataFrame,
+    tile_size: float = 10_000.0,
+    workers: int = 4,
+) -> gpd.GeoDataFrame:
+    """Return the part of *water* not covered by *coverage*, computed in tiles.
+
+    ``water − coverage`` per tile: in each tile box the full water and coverage
+    geometries intersecting it are unioned and differenced, and the result is
+    clipped to the tile so neighbouring tiles abut without overlap or double
+    counting. Memory-bounded (no global union/difference); threaded because
+    shapely releases the GIL.
+
+    Parameters
+    ----------
+    water : sea-mask polygons (the authoritative sea extent), same CRS as
+        *coverage*.
+    coverage : already-classified polygons stamped onto the sea.
+    tile_size : tile edge in CRS units.
+    workers : threads.
+
+    Returns
+    -------
+    GeoDataFrame of uncovered gap polygons (single polygons), CRS of *water*.
+    """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    water_geoms = water.geometry.to_numpy()
+    cov_geoms = coverage.geometry.to_numpy()
+    water_tree, cov_tree = STRtree(water_geoms), STRtree(cov_geoms)
+
+    xmin, ymin, xmax, ymax = shapely.total_bounds(water_geoms)
+    xs = np.arange(xmin, xmax, tile_size)
+    ys = np.arange(ymin, ymax, tile_size)
+    gx, gy = np.meshgrid(xs, ys)
+    tiles = shapely.box(gx, gy, gx + tile_size, gy + tile_size).ravel()
+    tiles = tiles[np.unique(water_tree.query(tiles, predicate="intersects")[0])]
+
+    def one_tile(tile):
+        w_idx = water_tree.query(tile, predicate="intersects")
+        if len(w_idx) == 0:
+            return []
+        gap = shapely.intersection(shapely.union_all(water_geoms[w_idx]), tile)
+        c_idx = cov_tree.query(tile, predicate="intersects")
+        if len(c_idx):
+            gap = shapely.difference(gap, shapely.union_all(cov_geoms[c_idx]))
+        parts = shapely.get_parts(_to_polygons(gap))
+        parts = parts[~shapely.is_empty(parts)]
+        return list(shapely.to_wkb(parts))
+
+    n_workers = max(1, workers)
+    print(f"Coverage gaps: {len(water_geoms):,} water, {len(cov_geoms):,} coverage, "
+          f"{len(tiles):,} tiles of {tile_size / 1000:g} km, {n_workers} threads", flush=True)
+    gaps: list[bytes] = []
+    t0 = time.monotonic()
+    step = max(1, len(tiles) // 100)
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        for i, res in enumerate(pool.map(one_tile, tiles), start=1):
+            gaps.extend(res)
+            if i % step == 0 or i == len(tiles):
+                elapsed = time.monotonic() - t0
+                eta = elapsed / i * (len(tiles) - i)
+                print(f"  {i:,}/{len(tiles):,} tiles ({100 * i / len(tiles):.0f}%), "
+                      f"{len(gaps):,} gap pieces, {elapsed / 60:.1f} min elapsed, "
+                      f"~{eta / 60:.1f} min left", flush=True)
+
+    geoms = shapely.from_wkb(gaps) if gaps else np.array([], dtype=object)
+    out = gpd.GeoDataFrame(geometry=geoms, crs=water.crs)
+    print(f"Gap pieces: {len(out):,} ({out.area.sum() / 1e6:,.2f} km²)")
     return out
