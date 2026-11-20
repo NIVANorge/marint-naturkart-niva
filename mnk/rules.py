@@ -77,7 +77,13 @@ def classify_nisje(lys: str, salinitet: str, substrat: str, toerfall: str) -> Ni
 
     The afotisk zone is always sublittoral, so ``toerfall`` is forced to
     ``"utenfor"`` when ``lys == "afotisk"``.
+
+    If any axis is missing (not a string — ``None``, ``pd.NA``, ``nan``) the
+    class is undetermined and ``(None, None)`` is returned. A complete but
+    unknown combination (e.g. an invalid token) still raises ``ValueError``.
     """
+    if not all(isinstance(v, str) for v in (lys, salinitet, substrat, toerfall)):
+        return (None, None)
     if lys == "afotisk":
         toerfall = "utenfor"
     try:

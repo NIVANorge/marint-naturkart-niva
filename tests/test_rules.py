@@ -34,6 +34,20 @@ def test_classify_nisje_unknown_raises():
 
 
 @pytest.mark.parametrize(
+    "lys,salinitet,substrat,toerfall",
+    [
+        (None, "salt", "fast", "innenfor"),
+        ("eufotisk", None, "fast", "innenfor"),
+        ("eufotisk", "salt", None, "innenfor"),
+        ("eufotisk", "salt", "fast", None),
+        (None, None, None, None),
+    ],
+)
+def test_classify_nisje_missing_axis_returns_none(lys, salinitet, substrat, toerfall):
+    assert classify_nisje(lys, salinitet, substrat, toerfall) == (None, None)
+
+
+@pytest.mark.parametrize(
     "seabee,salinitet,toerfall,expected",
     [
         ("ANGIO", "brakk", "innenfor", "NA-MF01"),
