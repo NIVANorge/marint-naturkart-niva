@@ -364,9 +364,15 @@ WATER_MASK_PATH = (
 )
 
 
+# Gaps at least this large (m²) are treated as standing waterbodies (possible
+# brakkvannspoll), split off to their own file instead of merged into tørrfall.
+BRAKKVANNSPOLL_MIN_AREA = 5e4  # 5 ha
+
+
 def prepare_torrfall_filled(
     water_path: str = WATER_MASK_PATH,
     max_area: float | None = None,
+    brakkvannspoll_min_area: float = BRAKKVANNSPOLL_MIN_AREA,
     tile_size: float = 5_000.0,
     workers: int = 4,
 ) -> Path:
@@ -377,7 +383,13 @@ def prepare_torrfall_filled(
     (:func:`mnk.vectorize.fill_torrfall_gaps`). Output has a ``_gap`` column
     (False = original tørrfall, True = added piece).
 
-    Written to ``geonorge/torrfall-filled_norge_25833.geo.parquet``.
+    Added pieces at least ``brakkvannspoll_min_area`` m² are unusually large
+    enclosed waterbodies (possible brakkvannspoll) rather than tidal flat; they
+    are excluded from the filled tørrfall and written separately to
+    ``geonorge/possible_brakkvannspoll_25833.geo.parquet``.
+
+    Filled tørrfall written to
+    ``geonorge/torrfall-filled_norge_25833.geo.parquet``.
     """
     crs = "EPSG:25833"
     root = Path(__file__).resolve().parent.parent
@@ -391,6 +403,17 @@ def prepare_torrfall_filled(
         torrfall, water, tile_size=tile_size, max_area=max_area, workers=workers
     )
     del water
+
+    is_poll = shapely.area(gaps.geometry.to_numpy()) >= brakkvannspoll_min_area
+    polls = gaps[is_poll].reset_index(drop=True)
+    gaps = gaps[~is_poll].reset_index(drop=True)
+    poll_path = root / "geonorge/possible_brakkvannspoll_25833.geo.parquet"
+    polls.to_parquet(poll_path, compression="snappy")
+    print(
+        f"Written {len(polls):,} possible brakkvannspoll "
+        f"(>= {brakkvannspoll_min_area/1e4:g} ha) to {poll_path}"
+    )
+
     out = gpd.GeoDataFrame(
         pd.concat([torrfall.assign(_gap=False), gaps.assign(_gap=True)], ignore_index=True),
         crs=crs,
