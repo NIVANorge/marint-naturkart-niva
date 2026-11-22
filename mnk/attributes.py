@@ -38,6 +38,20 @@ OPPHAV_KODE = "NKM"
 
 OBS_SUBSTRAT_KILDE = "substrat_kartlagt_ngu"
 
+# Source provenance tokens (datamodell style ``<akse>_<metode>_<kilde>``), joined
+# per polygon with SOURCE_SEP into the ``datakilde`` attribute. ``kartlagt`` =
+# surveyed/observed, ``modellert`` = modeled, ``fjernmaalt`` = remote-sensed.
+SOURCE_LYS_NIVA = "lys_modellert_niva"
+SOURCE_LYS_SEABEE = "lys_fjernmaalt_seabee"
+SOURCE_SALINITET_HI = "salinitet_modellert_hi"
+SOURCE_SUBSTRAT_NIVA = "substrat_modellert_niva"
+SOURCE_SUBSTRAT_NGU = OBS_SUBSTRAT_KILDE  # "substrat_kartlagt_ngu"
+SOURCE_SUBSTRAT_SEABEE = "substrat_fjernmaalt_seabee"
+SOURCE_TOERFALL_KARTVERKET = "toerfall_kartlagt_kartverket"
+SOURCE_OKSYGENMANGEL_MDIR = "oksygenmangel_kartlagt_mdir"
+SOURCE_TARETRALING_NIVA = "taretraling_kartlagt_niva"
+SOURCE_SEP = " | "
+
 # Working columns dropped once their derived attributes are set.
 WORKING_COLS = ("_substrat_kilde", "_is_dem")
 
@@ -56,6 +70,7 @@ NIN_FLATE_COLUMNS: list[str] = [
     R.COL_TOERFALL,
     "metode_klassifisering",
     "sannsynlighet_beskrivelse",
+    "datakilde",
 ]
 
 # Previous attribute set -> current data model.
@@ -142,6 +157,28 @@ def sannsynlighet_beskrivelse(
     return np.where(is_obs, "høy", np.where(has_dem, "medium", "lav"))
 
 
+def build_datakilde(
+    substrat_kilde,
+    toerfall,
+    *,
+    lys_token: str = SOURCE_LYS_NIVA,
+    sal_token: str = SOURCE_SALINITET_HI,
+) -> np.ndarray:
+    """Join the per-axis source tokens into the ``datakilde`` string (``|``-separated).
+
+    ``substrat_kilde`` is the per-polygon substrate source token (e.g.
+    :data:`SOURCE_SUBSTRAT_NIVA` / :data:`SOURCE_SUBSTRAT_NGU` /
+    :data:`SOURCE_SUBSTRAT_SEABEE`); ``toerfall`` the :data:`R.COL_TOERFALL`
+    value, which adds :data:`SOURCE_TOERFALL_KARTVERKET` for intertidal polygons.
+    Order is lys | salinitet | substrat | toerfall.
+    """
+    substrat = pd.Series(np.asarray(substrat_kilde), dtype="string").reset_index(drop=True)
+    toer = pd.Series(np.asarray(toerfall)).reset_index(drop=True)
+    base = lys_token + SOURCE_SEP + sal_token + SOURCE_SEP + substrat
+    inner = (toer == R.NKM_TOERFALL["innenfor"]).to_numpy()
+    return base.where(~inner, base + SOURCE_SEP + SOURCE_TOERFALL_KARTVERKET).to_numpy()
+
+
 def add_nkm_attributes(
     gdf: gpd.GeoDataFrame,
     nin_int_col: str = "nin_int",
@@ -176,6 +213,9 @@ def add_nkm_attributes(
         out["sannsynlighet_beskrivelse"] = sannsynlighet_beskrivelse(
             out, substrat_kilde_col, is_dem_col
         )
+
+    if substrat_kilde_col in out.columns:
+        out["datakilde"] = build_datakilde(out[substrat_kilde_col], out[R.COL_TOERFALL])
 
     out["nk_fid"] = [f"NKM-{i:010d}" for i in range(nk_fid_start, nk_fid_start + len(out))]
 

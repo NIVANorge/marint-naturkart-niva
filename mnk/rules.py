@@ -217,6 +217,7 @@ DIRECT_RULES: list[dict] = [
             COL_TOERFALL: [NKM_TOERFALL["utenfor"]],
         },
         "metode_klassifisering": "NKM_direkte_oksygenmangel",
+        "datakilde": "oksygenmangel_kartlagt_mdir",  # mirrors mnk.attributes.SOURCE_OKSYGENMANGEL_MDIR
     },
     {
         "nin_kode_fkid": "NA-MJ01",
@@ -225,5 +226,6 @@ DIRECT_RULES: list[dict] = [
         "values": None,
         "where": None,
         "metode_klassifisering": "NKM_direkte_taretralingsbunn",
+        "datakilde": "taretraling_kartlagt_niva",  # mirrors mnk.attributes.SOURCE_TARETRALING_NIVA
     },
 ]
