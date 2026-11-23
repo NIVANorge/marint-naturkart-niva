@@ -185,7 +185,6 @@ def add_nkm_attributes(
     kode_col: str = "nin_kode_fkid",
     substrat_kilde_col: str = "_substrat_kilde",
     metode_klassifisering: str = "NKM_regelbasert_dyp",
-    nk_fid_start: int = 1,
     is_dem_col: str = "_is_dem",
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
@@ -216,8 +215,6 @@ def add_nkm_attributes(
 
     if substrat_kilde_col in out.columns:
         out["datakilde"] = build_datakilde(out[substrat_kilde_col], out[R.COL_TOERFALL])
-
-    out["nk_fid"] = [f"NKM-{i:010d}" for i in range(nk_fid_start, nk_fid_start + len(out))]
 
     out = out.drop(columns=[c for c in WORKING_COLS if c in out.columns])
     keep = [c for c in NIN_FLATE_COLUMNS if c in out.columns] + [out.geometry.name]
