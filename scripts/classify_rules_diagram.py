@@ -125,7 +125,9 @@ def seabee_groups():
     """Group SeaBee classes by their effect on the model axes."""
     groups: dict[tuple, list[str]] = defaultdict(list)
     for cls in [*R.SEABEE_SUBSTRAT_OVERRIDE, *sorted(R.SEABEE_KEEP_MODEL)]:
-        groups[(R.SEABEE_SUBSTRAT_OVERRIDE.get(cls), R.SEABEE_LYS_OVERRIDE.get(cls))].append(cls)
+        key = (R.SEABEE_SUBSTRAT_OVERRIDE.get(cls), R.SEABEE_LYS_OVERRIDE.get(cls),
+               R.SEABEE_SA_FA_OVERRIDE.get(cls))
+        groups[key].append(cls)
     return groups
 
 
@@ -134,7 +136,7 @@ def seabee_step(d: Diagram, start: str) -> tuple[str, list[str]]:
 
     Returns (node leading into the NiN tree, ANGIO leaves that bypass it).
     """
-    d.lines.append(f'    subgraph FJ["2. Fjernmåling Field (04): erstatter {R.COL_LYS} og {R.COL_SUBSTRAT}"]')
+    d.lines.append(f'    subgraph FJ["2. Fjernmåling Field (04): erstatter {R.COL_LYS} og {R.COL_SUBSTRAT}, setter {R.COL_SA_FA}"]')
     d.lines.append("    direction TB")
     q = d.node("SeaBee-klasse?")
     d.edge(start, q)
@@ -157,12 +159,14 @@ def seabee_step(d: Diagram, start: str) -> tuple[str, list[str]]:
         angio.append(leaf)
 
     outs = []
-    for (sub, lys), classes in seabee_groups().items():
+    for (sub, lys, safa), classes in seabee_groups().items():
         parts = []
         if sub:
             parts.append(f"{R.COL_SUBSTRAT} := {fmt_code(R.NKM_SUBSTRAT, sub)}")
         if lys:
             parts.append(f"{R.COL_LYS} := {fmt_code(R.NKM_LYS, lys)}")
+        if safa:
+            parts.append(f"{R.COL_SA_FA} := {fmt_code(R.NKM_SA_FA, safa)}")
         label = ("<br/>".join(parts) if parts
                  else f"behold nisjemodellens<br/>{R.COL_LYS} og {R.COL_SUBSTRAT}")
         box = d.node(label, "box")
