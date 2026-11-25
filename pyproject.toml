@@ -76,7 +76,7 @@ dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features
 nisjemodell-raster = "papermill notebooks/03a_nisjemodell_raster.ipynb notebooks/03a_nisjemodell_raster.ipynb"
 nisjemodell-vektor = "papermill notebooks/03b_nisjemodell_vektor.ipynb notebooks/03b_nisjemodell_vektor.ipynb"
 nisjemodell = { depends-on = ["nisjemodell-raster", "nisjemodell-vektor"] }
-combine-remote-sensing = "papermill notebooks/04_combine_remote_sensing.ipynb notebooks/04_combine_remote_sensing.ipynb"
+combine-remote-sensing = "papermill notebooks/04_combine_remote_sensing_habitat.ipynb notebooks/04_combine_remote_sensing_habitat.ipynb"
 combine-direct = "papermill notebooks/05_combine_direct.ipynb notebooks/05_combine_direct.ipynb"
 combine = { depends-on = ["combine-remote-sensing", "combine-direct"] }
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
