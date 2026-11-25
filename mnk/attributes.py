@@ -38,6 +38,9 @@ OPPHAV_KODE = "NKM"
 
 OBS_SUBSTRAT_KILDE = "substrat_kartlagt_ngu"
 
+METODE_USIKKERHET_NISJEDATA = "NKM_nisjedata_kvalitet"
+METODE_USIKKERHET_HABITAT = "NKM_satelitt_habitat"
+
 # Source provenance tokens (datamodell style ``<akse>_<metode>_<kilde>``), joined
 # per polygon with SOURCE_SEP into the ``datakilde`` attribute. ``kartlagt`` =
 # surveyed/observed, ``modellert`` = modeled, ``fjernmaalt`` = remote-sensed.
@@ -70,6 +73,7 @@ NIN_FLATE_COLUMNS: list[str] = [
     R.COL_TOERFALL,
     "metode_klassifisering",
     "nkm_usikkerhet",
+    "metode_usikkerhet",
     "datakilde",
 ]
 
@@ -160,6 +164,26 @@ def nkm_usikkerhet(
     return np.where(is_obs, "lav", np.where(has_dem, "medium", "høy"))
 
 
+def habitat_usikkerhet(prob: np.ndarray, conf: np.ndarray) -> np.ndarray:
+    """SeaBee-habitat usikkerhet (``lav``/``medium``/``høy``) from the model P-values.
+
+    ``prob`` is the per-polygon class-probability matrix (the ``p_*`` columns, %);
+    ``conf`` the median own-class probability (the ``p50`` column, %). Uncertainty
+    is ``lav`` only when the model is both confident and unambiguous
+    (``conf >= 60`` and top1-top2 margin ``>= 30``), ``høy`` when confidence is low
+    or two classes nearly tie (``conf < 40`` or margin ``< 10``), else ``medium``.
+    This is the :data:`METODE_USIKKERHET_HABITAT` method.
+    """
+    prob = np.asarray(prob, dtype=float)
+    conf = np.asarray(conf, dtype=float)
+    top2 = np.sort(prob, axis=1)[:, -2:]
+    margin = top2[:, 1] - top2[:, 0]
+    out = np.full(len(conf), "medium", dtype=object)
+    out[(conf >= 60) & (margin >= 30)] = "lav"
+    out[(conf < 40) | (margin < 10)] = "høy"
+    return out
+
+
 def build_datakilde(
     substrat_kilde,
     toerfall,
@@ -192,7 +216,8 @@ def add_nkm_attributes(
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
 
-    ``nkm_usikkerhet`` is added when both ``substrat_kilde_col``
+    ``nkm_usikkerhet`` (and its method ``metode_usikkerhet`` =
+    :data:`METODE_USIKKERHET_NISJEDATA`) are added when both ``substrat_kilde_col``
     and ``is_dem_col`` exist (see :func:`nkm_usikkerhet`). Working
     columns (:data:`WORKING_COLS`) are dropped and the result is reduced to
     :data:`NIN_FLATE_COLUMNS` (those present, in canonical order).
@@ -215,6 +240,7 @@ def add_nkm_attributes(
         out["nkm_usikkerhet"] = nkm_usikkerhet(
             out, substrat_kilde_col, is_dem_col
         )
+        out["metode_usikkerhet"] = METODE_USIKKERHET_NISJEDATA
 
     if substrat_kilde_col in out.columns:
         out["datakilde"] = build_datakilde(out[substrat_kilde_col], out[R.COL_TOERFALL])
