@@ -56,7 +56,7 @@ SOURCE_TARETRALING_NIVA = "taretraling_kartlagt_niva"
 SOURCE_SEP = " | "
 
 # Working columns dropped once their derived attributes are set.
-WORKING_COLS = ("_substrat_kilde", "_is_dem")
+WORKING_COLS = ("_substrat_kilde",)
 
 # Canonical nin_flate_NK attribute order (nisjemodell output, notebook 03).
 # The geometry column is kept on the GeoDataFrame but is not an attribute.
@@ -130,40 +130,6 @@ def update_datamodel(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return out
 
 
-def _as_bool(series: pd.Series) -> pd.Series:
-    """Truth-aware coercion to boolean, safe for string ``"False"``/``"True"``.
-
-    Handles real booleans, numerics, and the string representations that
-    GeoPackage produces. Null/unrecognised values become ``False``.
-    """
-    if series.dtype == bool:
-        return series
-    if pd.api.types.is_numeric_dtype(series):
-        return series.fillna(0).astype(bool)
-    normalized = series.astype("string").str.strip().str.lower()
-    return normalized.isin(["true", "1"]).fillna(False)
-
-
-def nkm_usikkerhet(
-    gdf: gpd.GeoDataFrame,
-    substrat_kilde_col: str = "_substrat_kilde",
-    is_dem_col: str = "_is_dem",
-) -> np.ndarray:
-    """``lav`` for observed substrate, ``medium`` where DEM data exists, else ``høy``.
-
-    Uncertainty is lowest for directly observed substrate, medium where a DEM
-    informs the classification, and highest where neither applies.
-
-    ``is_dem_col`` may be real booleans, numerics, or the strings ``"True"``/
-    ``"False"`` that round-trip through GeoPackage. A plain ``astype(bool)`` is
-    unsafe here because ``bool("False")`` is ``True``; values are therefore
-    parsed truth-aware so string ``"False"`` maps to ``False``.
-    """
-    has_dem = _as_bool(gdf[is_dem_col]).to_numpy()
-    is_obs = (gdf[substrat_kilde_col] == OBS_SUBSTRAT_KILDE).to_numpy()
-    return np.where(is_obs, "lav", np.where(has_dem, "medium", "høy"))
-
-
 def habitat_usikkerhet(prob: np.ndarray, conf: np.ndarray) -> np.ndarray:
     """SeaBee-habitat usikkerhet (``lav``/``medium``/``høy``) from the model P-values.
 
@@ -212,14 +178,14 @@ def add_nkm_attributes(
     kode_col: str = "nin_kode_fkid",
     substrat_kilde_col: str = "_substrat_kilde",
     metode_klassifisering: str = "NKM_regelbasert_dyp",
-    is_dem_col: str = "_is_dem",
+    usikkerhet: np.ndarray | None = None,
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
 
-    ``nkm_usikkerhet`` (and its method ``metode_usikkerhet`` =
-    :data:`METODE_USIKKERHET_NISJEDATA`) are added when both ``substrat_kilde_col``
-    and ``is_dem_col`` exist (see :func:`nkm_usikkerhet`). Working
-    columns (:data:`WORKING_COLS`) are dropped and the result is reduced to
+    When ``usikkerhet`` is given (the per-axis decision-margin estimate from
+    :func:`mnk.utils.nisje_usikkerhet`) it sets ``nkm_usikkerhet`` with
+    ``metode_usikkerhet`` = :data:`METODE_USIKKERHET_NISJEDATA`. Working columns
+    (:data:`WORKING_COLS`) are dropped and the result is reduced to
     :data:`NIN_FLATE_COLUMNS` (those present, in canonical order).
     """
     out = gdf.copy()
@@ -236,10 +202,8 @@ def add_nkm_attributes(
     out[R.COL_TOERFALL] = axis(_TOERFALL, R.NKM_TOERFALL, "innenfor", "utenfor")
     out["nkm_prosess"] = out[kode_col].map(NKM_PROSESS)
 
-    if {substrat_kilde_col, is_dem_col} <= set(out.columns):
-        out["nkm_usikkerhet"] = nkm_usikkerhet(
-            out, substrat_kilde_col, is_dem_col
-        )
+    if usikkerhet is not None:
+        out["nkm_usikkerhet"] = np.asarray(usikkerhet)
         out["metode_usikkerhet"] = METODE_USIKKERHET_NISJEDATA
 
     if substrat_kilde_col in out.columns:

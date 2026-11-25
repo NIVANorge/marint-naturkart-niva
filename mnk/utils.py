@@ -10,8 +10,20 @@ import shapely
 from rasterio.features import rasterize
 from rasterio.windows import Window
 from rasterio.windows import bounds as window_bounds
+from rasterio.vrt import WarpedVRT
+from rasterio.enums import Resampling
 from osgeo import gdal
 from sqlalchemy import create_engine
+
+# Decision-margin thresholds for the nisjemodell usikkerhet (NKM_nisjedata_kvalitet).
+# A NiN class flips when a continuous driver crosses a threshold, so a small
+# margin means the pixel sits near a class boundary and is uncertain.
+# (lav >= first, høy < second); between the two is medium.
+USIKKERHET_SUB = (0.40, 0.10)   # |P_soft - P_hard| from the calibrated substrate probs
+USIKKERHET_LYS = (0.30, 0.10)   # |z_eu - depth| / z_eu (relative: Kd490 error scales with z_eu)
+USIKKERHET_SAL = (6.0, 2.0)     # |salinity - 18 PSU| (wide: HI mean-surface model error)
+SALINITY_BRAKKVANN = 18.0
+EUPHOTIC_LN = float(np.log(100.0))  # 1 % light (euphotic) depth = ln(100) / Kd490
 
 
 def grid_subdivide(
@@ -132,42 +144,95 @@ def parquet_to_postgis(parquet_path: str, crs: str = "EPSG:25833"):
     print("Table successfully loaded!")
 
 
-def dem_majority(
-    gdf: gpd.GeoDataFrame, dem_path: str, block_rows: int = 1024
-) -> np.ndarray:
-    """True where most of a polygon's pixels in *dem_path* equal 1.
+def _axis_usikkerhet(margin: np.ndarray, lav: float, hoy: float) -> np.ndarray:
+    """Map a per-polygon decision margin to 1=lav, 2=medium, 3=høy; 0 where NaN."""
+    cls = np.where(margin >= lav, 1, np.where(margin < hoy, 3, 2))
+    return np.where(np.isnan(margin), 0, cls).astype(np.int8)
 
-    Polygons are burned as IDs onto the DEM grid in row strips and DEM
-    pixels counted per ID. Polygons covering no pixel centre fall back to
-    the value at their representative point.
+
+def nisje_usikkerhet(
+    gdf: gpd.GeoDataFrame,
+    *,
+    kd_path: str,
+    depth_path: str,
+    salinity_path: str,
+    subprob_path: str,
+    is_obs: np.ndarray | None = None,
+    block_rows: int = 1024,
+) -> np.ndarray:
+    """Per-polygon usikkerhet (``lav``/``medium``/``høy``) from axis decision margins.
+
+    A NiN class flips when a continuous driver crosses a threshold, so a polygon
+    is uncertain when any axis sits near its boundary. Per-pixel margins are
+    computed on the ``depth_path`` grid (``kd_path``/``salinity_path``/
+    ``subprob_path`` warped onto it), averaged per polygon via burned IDs, mapped
+    to a per-axis class (:data:`USIKKERHET_SUB` / ``_LYS`` / ``_SAL``), and the
+    worst (most uncertain) axis wins. ``is_obs`` (NGU-observed substrate) forces
+    the substrate axis to ``lav``. Polygons that cover no pixel default to medium.
     """
     n = len(gdf)
-    dem_px = np.zeros(n, dtype=np.int64)
-    all_px = np.zeros(n, dtype=np.int64)
-    with rasterio.open(dem_path) as src:
-        geoms = gdf.geometry.to_crs(src.crs).values
+    sums = np.zeros((3, n))
+    cnts = np.zeros((3, n), dtype=np.int64)
+    with rasterio.open(depth_path) as ref:
+        geoms = gdf.geometry.to_crs(ref.crs).values
         tree = shapely.STRtree(geoms)
-        for row0 in range(0, src.height, block_rows):
-            win = Window(0, row0, src.width, min(block_rows, src.height - row0))
-            idx = tree.query(shapely.box(*window_bounds(win, src.transform)))
-            if not len(idx):
-                continue
-            ids = rasterize(
-                zip(geoms[idx], idx + 1),
-                out_shape=(int(win.height), int(win.width)),
-                transform=src.window_transform(win),
-                fill=0,
-                dtype="uint32",
-            )
-            hit = ids > 0
-            poly = ids[hit] - 1
-            all_px += np.bincount(poly, minlength=n)
-            dem_px += np.bincount(poly, weights=src.read(1, window=win)[hit] == 1, minlength=n).astype(np.int64)
+        grid = dict(crs=ref.crs, transform=ref.transform, width=ref.width, height=ref.height)
+        with rasterio.open(kd_path) as kd_src, rasterio.open(salinity_path) as sal_src, \
+                rasterio.open(subprob_path) as sub_src, \
+                WarpedVRT(kd_src, resampling=Resampling.bilinear, **grid) as kd_v, \
+                WarpedVRT(sal_src, resampling=Resampling.bilinear, **grid) as sal_v, \
+                WarpedVRT(sub_src, resampling=Resampling.nearest, **grid) as sub_v:
+            for row0 in range(0, ref.height, block_rows):
+                win = Window(0, row0, ref.width, min(block_rows, ref.height - row0))
+                idx = tree.query(shapely.box(*window_bounds(win, ref.transform)))
+                if not len(idx):
+                    continue
+                ids = rasterize(
+                    zip(geoms[idx], idx + 1),
+                    out_shape=(int(win.height), int(win.width)),
+                    transform=ref.window_transform(win),
+                    fill=0,
+                    dtype="uint32",
+                )
+                hit = ids > 0
+                if not hit.any():
+                    continue
+                poly = ids[hit] - 1
 
-        is_dem = dem_px * 2 > all_px
-        tiny = np.flatnonzero(all_px == 0)
-        if len(tiny):
-            pts = gpd.GeoSeries(geoms[tiny], crs=src.crs).representative_point()
-            vals = np.array([v[0] for v in src.sample(zip(pts.x, pts.y))])
-            is_dem[tiny] = vals == 1
-    return is_dem
+                depth_raw = ref.read(1, window=win).astype("float32")
+                depth = np.abs(np.where(depth_raw == ref.nodata, np.nan, depth_raw))
+                kd = kd_v.read(1, window=win).astype("float32")
+                kd = np.where(kd > 0, kd, np.nan)
+                sal = sal_v.read(1, window=win).astype("float32")
+                if sal_v.nodata is not None:
+                    sal = np.where(sal == sal_v.nodata, np.nan, sal)
+                soft = sub_v.read(1, window=win).astype("float32")
+                hard = sub_v.read(3, window=win).astype("float32")
+                if sub_v.nodata is not None:
+                    bad = soft == sub_v.nodata
+                    soft = np.where(bad, np.nan, soft)
+                    hard = np.where(bad, np.nan, hard)
+
+                margins = (
+                    np.abs(soft - hard),
+                    np.abs(EUPHOTIC_LN / kd - depth) / (EUPHOTIC_LN / kd),
+                    np.abs(sal - SALINITY_BRAKKVANN),
+                )
+                for a, m in enumerate(margins):
+                    mv = m[hit]
+                    ok = ~np.isnan(mv)
+                    sums[a] += np.bincount(poly[ok], weights=mv[ok], minlength=n)
+                    cnts[a] += np.bincount(poly[ok], minlength=n)
+
+    with np.errstate(invalid="ignore"):
+        means = np.where(cnts > 0, sums / np.maximum(cnts, 1), np.nan)
+    sub_c = _axis_usikkerhet(means[0], *USIKKERHET_SUB)
+    if is_obs is not None:
+        sub_c = np.where(np.asarray(is_obs, dtype=bool), 1, sub_c).astype(np.int8)
+    worst = np.maximum.reduce([
+        sub_c,
+        _axis_usikkerhet(means[1], *USIKKERHET_LYS),
+        _axis_usikkerhet(means[2], *USIKKERHET_SAL),
+    ])
+    worst[worst == 0] = 2
+    return np.array(["", "lav", "medium", "høy"], dtype=object)[worst]
