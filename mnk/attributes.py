@@ -69,7 +69,7 @@ NIN_FLATE_COLUMNS: list[str] = [
     R.COL_SUBSTRAT,
     R.COL_TOERFALL,
     "metode_klassifisering",
-    "sannsynlighet_beskrivelse",
+    "nkm_usikkerhet",
     "datakilde",
 ]
 
@@ -140,12 +140,15 @@ def _as_bool(series: pd.Series) -> pd.Series:
     return normalized.isin(["true", "1"]).fillna(False)
 
 
-def sannsynlighet_beskrivelse(
+def nkm_usikkerhet(
     gdf: gpd.GeoDataFrame,
     substrat_kilde_col: str = "_substrat_kilde",
     is_dem_col: str = "_is_dem",
 ) -> np.ndarray:
-    """``høy`` for observed substrate, ``medium`` where DEM data exists, else ``lav``.
+    """``lav`` for observed substrate, ``medium`` where DEM data exists, else ``høy``.
+
+    Uncertainty is lowest for directly observed substrate, medium where a DEM
+    informs the classification, and highest where neither applies.
 
     ``is_dem_col`` may be real booleans, numerics, or the strings ``"True"``/
     ``"False"`` that round-trip through GeoPackage. A plain ``astype(bool)`` is
@@ -154,7 +157,7 @@ def sannsynlighet_beskrivelse(
     """
     has_dem = _as_bool(gdf[is_dem_col]).to_numpy()
     is_obs = (gdf[substrat_kilde_col] == OBS_SUBSTRAT_KILDE).to_numpy()
-    return np.where(is_obs, "høy", np.where(has_dem, "medium", "lav"))
+    return np.where(is_obs, "lav", np.where(has_dem, "medium", "høy"))
 
 
 def build_datakilde(
@@ -189,8 +192,8 @@ def add_nkm_attributes(
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
 
-    ``sannsynlighet_beskrivelse`` is added when both ``substrat_kilde_col``
-    and ``is_dem_col`` exist (see :func:`sannsynlighet_beskrivelse`). Working
+    ``nkm_usikkerhet`` is added when both ``substrat_kilde_col``
+    and ``is_dem_col`` exist (see :func:`nkm_usikkerhet`). Working
     columns (:data:`WORKING_COLS`) are dropped and the result is reduced to
     :data:`NIN_FLATE_COLUMNS` (those present, in canonical order).
     """
@@ -209,7 +212,7 @@ def add_nkm_attributes(
     out["nkm_prosess"] = out[kode_col].map(NKM_PROSESS)
 
     if {substrat_kilde_col, is_dem_col} <= set(out.columns):
-        out["sannsynlighet_beskrivelse"] = sannsynlighet_beskrivelse(
+        out["nkm_usikkerhet"] = nkm_usikkerhet(
             out, substrat_kilde_col, is_dem_col
         )
 
