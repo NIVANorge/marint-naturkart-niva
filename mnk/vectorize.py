@@ -464,7 +464,11 @@ def subtract_layer(
 
 
 def intersect_layers(
-    left: gpd.GeoDataFrame, right: gpd.GeoDataFrame
+    left: gpd.GeoDataFrame,
+    right: gpd.GeoDataFrame,
+    workers: int = 4,
+    progress: bool = False,
+    chunk: int = 2000,
 ) -> gpd.GeoDataFrame:
     """Pairwise intersection via STRtree (fast ``overlay(how="intersection")``).
 
@@ -474,9 +478,15 @@ def intersect_layers(
     pairs. Attributes from both layers are carried onto each resulting piece
     (right-layer column names colliding with the left get a ``_2`` suffix).
 
+    The per-pair intersection runs in ``chunk``-sized blocks across ``workers``
+    threads (GEOS releases the GIL).
+
     Parameters
     ----------
     left, right : GeoDataFrames (must share a CRS).
+    workers : threads for the per-pair intersection (1 = serial).
+    progress : print a running count of processed pairs.
+    chunk : pairs per thread task.
 
     Returns
     -------
@@ -488,8 +498,23 @@ def intersect_layers(
     tree = STRtree(right_geoms)
     left_idxs, right_idxs = tree.query(left_geoms, predicate="intersects")
 
-    pieces = shapely.intersection(left_geoms[left_idxs], right_geoms[right_idxs])
-    pieces = np.array([_to_polygons(g) for g in pieces], dtype=object)
+    lg = left_geoms[left_idxs]
+    rg = right_geoms[right_idxs]
+    total = len(left_idxs)
+
+    def _piece(start):
+        sl = slice(start, start + chunk)
+        return start, [_to_polygons(g) for g in shapely.intersection(lg[sl], rg[sl])]
+
+    pieces = np.empty(total, dtype=object)
+    done = 0
+    for start, block in _map(_piece, range(0, total, chunk), workers):
+        pieces[start:start + len(block)] = block
+        done += len(block)
+        if progress and (done % (chunk * 10) < chunk or done == total):
+            print(f"\r  intersect_layers: {done:,}/{total:,} pairs", end="", flush=True)
+    if progress and total:
+        print()
 
     left_cols = [c for c in left.columns if c != left.geometry.name]
     right_cols = [c for c in right.columns if c != right.geometry.name]
