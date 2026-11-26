@@ -158,7 +158,8 @@ def nisje_axis_margins(
     depth_path: str,
     salinity_path: str,
     subprob_path: str,
-    block_rows: int = 1024,
+    block: int = 1024,
+    progress: bool = True,
 ) -> np.ndarray:
     """Per-polygon decision margin for the substrate, light and salinity axes.
 
@@ -171,6 +172,9 @@ def nisje_axis_margins(
     reads). Returns a ``(3, len(gdf))`` array (substrate, light, salinity); NaN
     only where even that pixel is nodata. :func:`usikkerhet_from_margins` turns
     it into lav/medium/høy.
+
+    Raster data is read in ``block`` x ``block`` tiles so peak memory stays
+    bounded by the tile size rather than the full raster width.
     """
     n = len(gdf)
     sums = np.zeros((3, n))
@@ -187,55 +191,72 @@ def nisje_axis_margins(
                 WarpedVRT(kd_src, resampling=Resampling.bilinear, **grid) as kd_v, \
                 WarpedVRT(sal_src, resampling=Resampling.bilinear, **grid) as sal_v, \
                 WarpedVRT(sub_src, resampling=Resampling.nearest, **grid) as sub_v:
-            for row0 in range(0, ref.height, block_rows):
-                win = Window(0, row0, ref.width, min(block_rows, ref.height - row0))
-                idx = tree.query(shapely.box(*window_bounds(win, ref.transform)))
-                if not len(idx):
-                    continue
-                ids = rasterize(
-                    zip(geoms[idx], idx + 1),
-                    out_shape=(int(win.height), int(win.width)),
-                    transform=ref.window_transform(win),
-                    fill=0,
-                    dtype="uint32",
-                )
-                hit = ids > 0
-                poly = ids[hit] - 1
+            n_tiles = len(range(0, ref.height, block)) * len(range(0, ref.width, block))
+            done = 0
+            for row0 in range(0, ref.height, block):
+                h = min(block, ref.height - row0)
+                for col0 in range(0, ref.width, block):
+                    done += 1
+                    if progress:
+                        covered = int((cnts[0] > 0).sum())
+                        print(
+                            f"\r  nisje_usikkerhet: tile {done:,}/{n_tiles:,}"
+                            f" ({100 * done / n_tiles:.0f}%), {covered:,}/{n:,} polygons covered",
+                            end="",
+                            flush=True,
+                        )
+                    w = min(block, ref.width - col0)
+                    win = Window(col0, row0, w, h)
+                    idx = tree.query(shapely.box(*window_bounds(win, ref.transform)))
+                    if not len(idx):
+                        continue
+                    ids = rasterize(
+                        zip(geoms[idx], idx + 1),
+                        out_shape=(h, w),
+                        transform=ref.window_transform(win),
+                        fill=0,
+                        dtype="uint32",
+                    )
+                    hit = ids > 0
+                    poly = ids[hit] - 1
 
-                depth_raw = ref.read(1, window=win).astype("float32")
-                depth = np.abs(np.where(depth_raw == ref.nodata, np.nan, depth_raw))
-                kd = kd_v.read(1, window=win).astype("float32")
-                kd = np.where(kd > 0, kd, np.nan)
-                sal = sal_v.read(1, window=win).astype("float32")
-                if sal_v.nodata is not None:
-                    sal = np.where(sal == sal_v.nodata, np.nan, sal)
-                soft = sub_v.read(1, window=win).astype("float32")
-                hard = sub_v.read(3, window=win).astype("float32")
-                if sub_v.nodata is not None:
-                    bad = soft == sub_v.nodata
-                    soft = np.where(bad, np.nan, soft)
-                    hard = np.where(bad, np.nan, hard)
+                    depth_raw = ref.read(1, window=win).astype("float32")
+                    depth = np.abs(np.where(depth_raw == ref.nodata, np.nan, depth_raw))
+                    kd = kd_v.read(1, window=win).astype("float32")
+                    kd = np.where(kd > 0, kd, np.nan)
+                    sal = sal_v.read(1, window=win).astype("float32")
+                    if sal_v.nodata is not None:
+                        sal = np.where(sal == sal_v.nodata, np.nan, sal)
+                    soft = sub_v.read(1, window=win).astype("float32")
+                    hard = sub_v.read(3, window=win).astype("float32")
+                    if sub_v.nodata is not None:
+                        bad = soft == sub_v.nodata
+                        soft = np.where(bad, np.nan, soft)
+                        hard = np.where(bad, np.nan, hard)
 
-                margins = (
-                    np.abs(soft - hard),
-                    np.abs(EUPHOTIC_LN / kd - depth) / (EUPHOTIC_LN / kd),
-                    np.abs(sal - SALINITY_BRAKKVANN),
-                )
-                for a, m in enumerate(margins):
-                    mv = m[hit]
-                    ok = ~np.isnan(mv)
-                    sums[a] += np.bincount(poly[ok], weights=mv[ok], minlength=n)
-                    cnts[a] += np.bincount(poly[ok], minlength=n)
-
-                in_strip = np.flatnonzero(
-                    (rep_r >= row0) & (rep_r < row0 + win.height)
-                    & (rep_c >= 0) & (rep_c < win.width)
-                )
-                if len(in_strip):
-                    lr = rep_r[in_strip] - row0
-                    lc = rep_c[in_strip]
+                    z_eu = EUPHOTIC_LN / kd
+                    margins = (
+                        np.abs(soft - hard),
+                        np.abs(z_eu - depth) / z_eu,
+                        np.abs(sal - SALINITY_BRAKKVANN),
+                    )
                     for a, m in enumerate(margins):
-                        fb[a, in_strip] = m[lr, lc]
+                        mv = m[hit]
+                        ok = ~np.isnan(mv)
+                        sums[a] += np.bincount(poly[ok], weights=mv[ok], minlength=n)
+                        cnts[a] += np.bincount(poly[ok], minlength=n)
+
+                    in_tile = np.flatnonzero(
+                        (rep_r >= row0) & (rep_r < row0 + h)
+                        & (rep_c >= col0) & (rep_c < col0 + w)
+                    )
+                    if len(in_tile):
+                        lr = rep_r[in_tile] - row0
+                        lc = rep_c[in_tile] - col0
+                        for a, m in enumerate(margins):
+                            fb[a, in_tile] = m[lr, lc]
+            if progress:
+                print()
 
     with np.errstate(invalid="ignore"):
         means = np.where(cnts > 0, sums / np.maximum(cnts, 1), np.nan)
@@ -276,7 +297,8 @@ def nisje_usikkerhet(
     salinity_path: str,
     subprob_path: str,
     is_obs: np.ndarray | None = None,
-    block_rows: int = 1024,
+    block: int = 1024,
+    progress: bool = True,
 ) -> np.ndarray:
     """Per-polygon usikkerhet (``lav``/``medium``/``høy``) from axis decision margins.
 
@@ -289,6 +311,7 @@ def nisje_usikkerhet(
         depth_path=depth_path,
         salinity_path=salinity_path,
         subprob_path=subprob_path,
-        block_rows=block_rows,
+        block=block,
+        progress=progress,
     )
     return usikkerhet_from_margins(means, is_obs=is_obs)
