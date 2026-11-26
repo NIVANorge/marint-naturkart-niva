@@ -405,7 +405,10 @@ def subtract_land(
 
 
 def subtract_layer(
-    gdf: gpd.GeoDataFrame, clip_gdf: gpd.GeoDataFrame, workers: int = 4
+    gdf: gpd.GeoDataFrame,
+    clip_gdf: gpd.GeoDataFrame,
+    workers: int = 4,
+    progress: bool = False,
 ) -> gpd.GeoDataFrame:
     """Subtract ``clip_gdf`` from ``gdf`` via STRtree (fast ``overlay(how="difference")``).
 
@@ -422,6 +425,7 @@ def subtract_layer(
     gdf : GeoDataFrame whose attributes are preserved.
     clip_gdf : GeoDataFrame whose geometries are removed from ``gdf``.
     workers : threads for the per-polygon loop (1 = serial).
+    progress : print a running count of processed polygons.
 
     Returns
     -------
@@ -445,8 +449,13 @@ def subtract_layer(
         g_i, geom, clips = item
         return g_i, _to_polygons(geom.difference(shapely.union_all(clips)))
 
-    for g_i, geom in _map(_diff, work, workers):
+    total = len(work)
+    for done, (g_i, geom) in enumerate(_map(_diff, work, workers), start=1):
         geoms[g_i] = geom
+        if progress and (done % 1000 == 0 or done == total):
+            print(f"\r  subtract_layer: {done:,}/{total:,} polygons", end="", flush=True)
+    if progress and total:
+        print()
 
     result = gdf.copy()
     result["geometry"] = geoms
