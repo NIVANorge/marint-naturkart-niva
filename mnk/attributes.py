@@ -172,12 +172,49 @@ def build_datakilde(
     return base.where(~inner, base + SOURCE_SEP + SOURCE_TOERFALL_KARTVERKET).to_numpy()
 
 
+# Each datakilde source token -> its k_metode classification code. metode_klassifisering
+# is the de-duplicated, datakilde-ordered pipe-list of these; see metode_from_datakilde.
+METODE_FROM_KILDE: dict[str, str] = {
+    SOURCE_LYS_NIVA: "NKM_modell_lyssone",
+    SOURCE_LYS_SEABEE: "NKM_modell_satellitt",
+    SOURCE_SALINITET_HI: "NKM_modell_salinitet",
+    SOURCE_SUBSTRAT_NIVA: "NKM_modell_bunntype",
+    SOURCE_SUBSTRAT_NGU: "NKM_direkte_bunntype",
+    SOURCE_SUBSTRAT_SEABEE: "NKM_modell_satellitt",
+    SOURCE_TOERFALL_KARTVERKET: "NKM_regelbasert_fjaeresone",
+    SOURCE_OKSYGENMANGEL_MDIR: "NKM_direkte_oksygenmangel",
+    SOURCE_TARETRALING_NIVA: "NKM_direkte_taretralingsbunn",
+}
+
+METODE_SEP = "|"
+
+
+def metode_from_datakilde(datakilde) -> np.ndarray:
+    """Derive the ``metode_klassifisering`` pipe-list from the ``datakilde`` attribute.
+
+    Each :data:`SOURCE_SEP`-joined datakilde token is mapped to its k_metode code
+    (:data:`METODE_FROM_KILDE`); duplicates are dropped keeping datakilde order and
+    the codes are joined with :data:`METODE_SEP`. NA/empty datakilde yields NA.
+    """
+    def one(dk):
+        if pd.isna(dk) or not dk:
+            return pd.NA
+        codes: list[str] = []
+        for tok in dk.split(SOURCE_SEP):
+            code = METODE_FROM_KILDE.get(tok)
+            if code and code not in codes:
+                codes.append(code)
+        return METODE_SEP.join(codes) if codes else pd.NA
+
+    return pd.Series(np.asarray(datakilde), dtype="string").map(one).to_numpy()
+
+
 def add_nkm_attributes(
     gdf: gpd.GeoDataFrame,
     nin_int_col: str = "nin_int",
     kode_col: str = "nin_kode_fkid",
     substrat_kilde_col: str = "_substrat_kilde",
-    metode_klassifisering: str = "NKM_regelbasert_dyp",
+    metode_klassifisering: str | None = None,
     usikkerhet: np.ndarray | None = None,
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
@@ -195,7 +232,6 @@ def add_nkm_attributes(
         return ints.map(lambda v: codes[yes] if v in members else codes[no])
 
     out["opphav_kode"] = OPPHAV_KODE
-    out["metode_klassifisering"] = metode_klassifisering
     out[R.COL_LYS] = axis(_EUFOTISK, R.NKM_LYS, "eufotisk", "afotisk")
     out[R.COL_SALINITET] = axis(_BRAKKVANN, R.NKM_SALINITET, "brakk", "salt")
     out[R.COL_SUBSTRAT] = axis(_FASTBUNN, R.NKM_SUBSTRAT, "fast", "løst")
@@ -208,6 +244,9 @@ def add_nkm_attributes(
 
     if substrat_kilde_col in out.columns:
         out["datakilde"] = build_datakilde(out[substrat_kilde_col], out[R.COL_TOERFALL])
+        out["metode_klassifisering"] = metode_from_datakilde(out["datakilde"])
+    else:
+        out["metode_klassifisering"] = metode_klassifisering
 
     out = out.drop(columns=[c for c in WORKING_COLS if c in out.columns])
     keep = [c for c in NIN_FLATE_COLUMNS if c in out.columns] + [out.geometry.name]
