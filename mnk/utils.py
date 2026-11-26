@@ -10,6 +10,7 @@ import shapely
 from rasterio.features import rasterize
 from rasterio.windows import Window
 from rasterio.windows import bounds as window_bounds
+from rasterio.transform import rowcol
 from rasterio.vrt import WarpedVRT
 from rasterio.enums import Resampling
 from osgeo import gdal
@@ -150,32 +151,36 @@ def _axis_usikkerhet(margin: np.ndarray, lav: float, hoy: float) -> np.ndarray:
     return np.where(np.isnan(margin), 0, cls).astype(np.int8)
 
 
-def nisje_usikkerhet(
+def nisje_axis_margins(
     gdf: gpd.GeoDataFrame,
     *,
     kd_path: str,
     depth_path: str,
     salinity_path: str,
     subprob_path: str,
-    is_obs: np.ndarray | None = None,
     block_rows: int = 1024,
 ) -> np.ndarray:
-    """Per-polygon usikkerhet (``lav``/``medium``/``høy``) from axis decision margins.
+    """Per-polygon decision margin for the substrate, light and salinity axes.
 
     A NiN class flips when a continuous driver crosses a threshold, so a polygon
     is uncertain when any axis sits near its boundary. Per-pixel margins are
     computed on the ``depth_path`` grid (``kd_path``/``salinity_path``/
-    ``subprob_path`` warped onto it), averaged per polygon via burned IDs, mapped
-    to a per-axis class (:data:`USIKKERHET_SUB` / ``_LYS`` / ``_SAL``), and the
-    worst (most uncertain) axis wins. ``is_obs`` (NGU-observed substrate) forces
-    the substrate axis to ``lav``. Polygons that cover no pixel default to medium.
+    ``subprob_path`` warped onto it) and averaged per polygon via burned IDs.
+    Polygons too small to cover a pixel centre fall back to the margin at their
+    representative-point pixel (sampled from the same streamed data, no extra
+    reads). Returns a ``(3, len(gdf))`` array (substrate, light, salinity); NaN
+    only where even that pixel is nodata. :func:`usikkerhet_from_margins` turns
+    it into lav/medium/høy.
     """
     n = len(gdf)
     sums = np.zeros((3, n))
     cnts = np.zeros((3, n), dtype=np.int64)
+    fb = np.full((3, n), np.nan, dtype="float32")
     with rasterio.open(depth_path) as ref:
         geoms = gdf.geometry.to_crs(ref.crs).values
         tree = shapely.STRtree(geoms)
+        reps = gpd.GeoSeries(geoms, crs=ref.crs).representative_point()
+        rep_r, rep_c = (np.asarray(a) for a in rowcol(ref.transform, reps.x.values, reps.y.values))
         grid = dict(crs=ref.crs, transform=ref.transform, width=ref.width, height=ref.height)
         with rasterio.open(kd_path) as kd_src, rasterio.open(salinity_path) as sal_src, \
                 rasterio.open(subprob_path) as sub_src, \
@@ -195,8 +200,6 @@ def nisje_usikkerhet(
                     dtype="uint32",
                 )
                 hit = ids > 0
-                if not hit.any():
-                    continue
                 poly = ids[hit] - 1
 
                 depth_raw = ref.read(1, window=win).astype("float32")
@@ -224,15 +227,68 @@ def nisje_usikkerhet(
                     sums[a] += np.bincount(poly[ok], weights=mv[ok], minlength=n)
                     cnts[a] += np.bincount(poly[ok], minlength=n)
 
+                in_strip = np.flatnonzero(
+                    (rep_r >= row0) & (rep_r < row0 + win.height)
+                    & (rep_c >= 0) & (rep_c < win.width)
+                )
+                if len(in_strip):
+                    lr = rep_r[in_strip] - row0
+                    lc = rep_c[in_strip]
+                    for a, m in enumerate(margins):
+                        fb[a, in_strip] = m[lr, lc]
+
     with np.errstate(invalid="ignore"):
         means = np.where(cnts > 0, sums / np.maximum(cnts, 1), np.nan)
-    sub_c = _axis_usikkerhet(means[0], *USIKKERHET_SUB)
+    return np.where(cnts == 0, fb, means)
+
+
+def usikkerhet_from_margins(
+    means: np.ndarray,
+    is_obs: np.ndarray | None = None,
+    sub: tuple[float, float] = USIKKERHET_SUB,
+    lys: tuple[float, float] = USIKKERHET_LYS,
+    sal: tuple[float, float] = USIKKERHET_SAL,
+) -> np.ndarray:
+    """Classify per-axis margins into ``lav``/``medium``/``høy``.
+
+    ``means`` is the ``(3, n)`` array from :func:`nisje_axis_margins`. The worst
+    (most uncertain) axis wins; ``is_obs`` (NGU-observed substrate) forces the
+    substrate axis to ``lav``; a polygon with no axis data defaults to medium.
+    Thresholds default to the module ``USIKKERHET_*`` constants.
+    """
+    sub_c = _axis_usikkerhet(means[0], *sub)
     if is_obs is not None:
         sub_c = np.where(np.asarray(is_obs, dtype=bool), 1, sub_c).astype(np.int8)
     worst = np.maximum.reduce([
         sub_c,
-        _axis_usikkerhet(means[1], *USIKKERHET_LYS),
-        _axis_usikkerhet(means[2], *USIKKERHET_SAL),
+        _axis_usikkerhet(means[1], *lys),
+        _axis_usikkerhet(means[2], *sal),
     ])
     worst[worst == 0] = 2
     return np.array(["", "lav", "medium", "høy"], dtype=object)[worst]
+
+
+def nisje_usikkerhet(
+    gdf: gpd.GeoDataFrame,
+    *,
+    kd_path: str,
+    depth_path: str,
+    salinity_path: str,
+    subprob_path: str,
+    is_obs: np.ndarray | None = None,
+    block_rows: int = 1024,
+) -> np.ndarray:
+    """Per-polygon usikkerhet (``lav``/``medium``/``høy``) from axis decision margins.
+
+    Thin wrapper over :func:`nisje_axis_margins` + :func:`usikkerhet_from_margins`
+    using the module ``USIKKERHET_*`` thresholds.
+    """
+    means = nisje_axis_margins(
+        gdf,
+        kd_path=kd_path,
+        depth_path=depth_path,
+        salinity_path=salinity_path,
+        subprob_path=subprob_path,
+        block_rows=block_rows,
+    )
+    return usikkerhet_from_margins(means, is_obs=is_obs)
