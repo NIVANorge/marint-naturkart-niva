@@ -16,6 +16,8 @@ from rasterio.enums import Resampling
 from osgeo import gdal
 from sqlalchemy import create_engine
 
+from mnk.attributes import USIKKERHET_AXIS_COLS, USIKKERHET_KLASSER
+
 # Decision-margin thresholds for the nisjemodell usikkerhet (NKM_nisjedata_kvalitet).
 # A NiN class flips when a continuous driver crosses a threshold, so a small
 # margin means the pixel sits near a class boundary and is uncertain.
@@ -263,6 +265,28 @@ def nisje_axis_margins(
     return np.where(cnts == 0, fb, means)
 
 
+_USIKKERHET_LABELS = np.array([None, *USIKKERHET_KLASSER], dtype=object)
+
+
+def usikkerhet_axis_classes(
+    means: np.ndarray,
+    is_obs: np.ndarray | None = None,
+    sub: tuple[float, float] = USIKKERHET_SUB,
+    lys: tuple[float, float] = USIKKERHET_LYS,
+    sal: tuple[float, float] = USIKKERHET_SAL,
+) -> np.ndarray:
+    """Classify each axis margin into 1=lav, 2=medium, 3=høy (0 = no data).
+
+    ``means`` is the ``(3, n)`` array from :func:`nisje_axis_margins`; the result
+    has the same shape and axis order (substrate, light, salinity). ``is_obs``
+    (NGU-observed substrate) forces the substrate axis to ``lav``.
+    """
+    sub_c = _axis_usikkerhet(means[0], *sub)
+    if is_obs is not None:
+        sub_c = np.where(np.asarray(is_obs, dtype=bool), 1, sub_c).astype(np.int8)
+    return np.stack([sub_c, _axis_usikkerhet(means[1], *lys), _axis_usikkerhet(means[2], *sal)])
+
+
 def usikkerhet_from_margins(
     means: np.ndarray,
     is_obs: np.ndarray | None = None,
@@ -270,23 +294,35 @@ def usikkerhet_from_margins(
     lys: tuple[float, float] = USIKKERHET_LYS,
     sal: tuple[float, float] = USIKKERHET_SAL,
 ) -> np.ndarray:
-    """Classify per-axis margins into ``lav``/``medium``/``høy``.
+    """Classify per-axis margins into a combined ``lav``/``medium``/``høy``.
 
-    ``means`` is the ``(3, n)`` array from :func:`nisje_axis_margins`. The worst
-    (most uncertain) axis wins; ``is_obs`` (NGU-observed substrate) forces the
-    substrate axis to ``lav``; a polygon with no axis data defaults to medium.
-    Thresholds default to the module ``USIKKERHET_*`` constants.
+    The worst (most uncertain) axis from :func:`usikkerhet_axis_classes` wins; a
+    polygon with no axis data defaults to medium.
     """
-    sub_c = _axis_usikkerhet(means[0], *sub)
-    if is_obs is not None:
-        sub_c = np.where(np.asarray(is_obs, dtype=bool), 1, sub_c).astype(np.int8)
-    worst = np.maximum.reduce([
-        sub_c,
-        _axis_usikkerhet(means[1], *lys),
-        _axis_usikkerhet(means[2], *sal),
-    ])
+    worst = usikkerhet_axis_classes(means, is_obs, sub, lys, sal).max(axis=0)
     worst[worst == 0] = 2
-    return np.array(["", "lav", "medium", "høy"], dtype=object)[worst]
+    return _USIKKERHET_LABELS[worst]
+
+
+def usikkerhet_table(
+    means: np.ndarray,
+    is_obs: np.ndarray | None = None,
+    sub: tuple[float, float] = USIKKERHET_SUB,
+    lys: tuple[float, float] = USIKKERHET_LYS,
+    sal: tuple[float, float] = USIKKERHET_SAL,
+) -> pd.DataFrame:
+    """Combined and per-axis usikkerhet labels as a DataFrame.
+
+    Columns: ``nkm_usikkerhetsklasse`` (see :func:`usikkerhet_from_margins`) and
+    :data:`mnk.attributes.USIKKERHET_AXIS_COLS` (substrate, light, salinity),
+    where an axis without data is NA.
+    """
+    axes = usikkerhet_axis_classes(means, is_obs, sub, lys, sal)
+    worst = axes.max(axis=0)
+    worst[worst == 0] = 2
+    data = {"nkm_usikkerhetsklasse": _USIKKERHET_LABELS[worst]}
+    data.update({col: _USIKKERHET_LABELS[a] for col, a in zip(USIKKERHET_AXIS_COLS, axes)})
+    return pd.DataFrame(data).astype("string")
 
 
 def nisje_usikkerhet(
@@ -299,11 +335,12 @@ def nisje_usikkerhet(
     is_obs: np.ndarray | None = None,
     block: int = 1024,
     progress: bool = True,
-) -> np.ndarray:
+) -> pd.DataFrame:
     """Per-polygon usikkerhet (``lav``/``medium``/``høy``) from axis decision margins.
 
-    Thin wrapper over :func:`nisje_axis_margins` + :func:`usikkerhet_from_margins`
-    using the module ``USIKKERHET_*`` thresholds.
+    Thin wrapper over :func:`nisje_axis_margins` + :func:`usikkerhet_table` using
+    the module ``USIKKERHET_*`` thresholds; returns the combined class plus one
+    column per axis, row-aligned with ``gdf``.
     """
     means = nisje_axis_margins(
         gdf,
@@ -314,4 +351,4 @@ def nisje_usikkerhet(
         block=block,
         progress=progress,
     )
-    return usikkerhet_from_margins(means, is_obs=is_obs)
+    return usikkerhet_table(means, is_obs=is_obs)

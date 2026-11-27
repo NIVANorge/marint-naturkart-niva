@@ -55,6 +55,16 @@ SOURCE_OKSYGENMANGEL_MDIR = "oksygenmangel_kartlagt_mdir"
 SOURCE_TARETRALING_NIVA = "taretraling_kartlagt_niva"
 SOURCE_SEP = " | "
 
+# Per-axis usikkerhet (lav/medium/høy, NA = no data); nkm_usikkerhetsklasse is the
+# worst of these. Order matches mnk.utils.nisje_axis_margins (substrate, light, salinity).
+USIKKERHET_AXIS_COLS: tuple[str, str, str] = (
+    "nkm_usikkerhet_substrat",
+    "nkm_usikkerhet_lys",
+    "nkm_usikkerhet_salinitet",
+)
+
+USIKKERHET_KLASSER: tuple[str, str, str] = ("lav", "medium", "høy")
+
 # Working columns dropped once their derived attributes are set.
 WORKING_COLS = ("_substrat_kilde",)
 
@@ -73,6 +83,7 @@ NIN_FLATE_COLUMNS: list[str] = [
     R.COL_TOERFALL,
     "metode_klassifisering",
     "nkm_usikkerhetsklasse",
+    *USIKKERHET_AXIS_COLS,
     "metode_usikkerhet",
     "datakilde",
 ]
@@ -189,19 +200,33 @@ def metode_from_datakilde(datakilde) -> np.ndarray:
     return pd.Series(np.asarray(datakilde), dtype="string").map(one).to_numpy()
 
 
+def worst_usikkerhet(axes: pd.DataFrame, default: str = "medium") -> pd.Series:
+    """Row-wise worst (most uncertain) of ``lav``/``medium``/``høy`` label columns.
+
+    NA labels are ignored; a row with no label at all gets ``default``, matching
+    the combined class from :func:`mnk.utils.usikkerhet_from_margins`.
+    """
+    rank = {k: i for i, k in enumerate(USIKKERHET_KLASSER, start=1)}
+    worst = axes.apply(lambda s: s.map(rank)).max(axis=1)
+    label = worst.map({i: k for k, i in rank.items()}).fillna(default)
+    return label.astype("string")
+
+
 def add_nkm_attributes(
     gdf: gpd.GeoDataFrame,
     nin_int_col: str = "nin_int",
     kode_col: str = "nin_kode_fkid",
     substrat_kilde_col: str = "_substrat_kilde",
     metode_klassifisering: str | None = None,
-    usikkerhet: np.ndarray | None = None,
+    usikkerhet: np.ndarray | pd.DataFrame | None = None,
 ) -> gpd.GeoDataFrame:
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
 
     When ``usikkerhet`` is given (the per-axis decision-margin estimate from
     :func:`mnk.utils.nisje_usikkerhet`) it sets ``nkm_usikkerhetsklasse`` with
-    ``metode_usikkerhet`` = :data:`METODE_USIKKERHET_NISJEDATA`. Working columns
+    ``metode_usikkerhet`` = :data:`METODE_USIKKERHET_NISJEDATA`. A DataFrame
+    (row-aligned with *gdf*) also sets the :data:`USIKKERHET_AXIS_COLS` it holds;
+    a plain array sets only the combined class. Working columns
     (:data:`WORKING_COLS`) are dropped and the result is reduced to
     :data:`NIN_FLATE_COLUMNS` (those present, in canonical order).
     """
@@ -218,7 +243,12 @@ def add_nkm_attributes(
     out[R.COL_TOERFALL] = axis(_TOERFALL, R.NKM_TOERFALL, "innenfor", "utenfor")
     out["nkm_prosess"] = out[kode_col].map(NKM_PROSESS)
 
-    if usikkerhet is not None:
+    if isinstance(usikkerhet, pd.DataFrame):
+        for col in ("nkm_usikkerhetsklasse", *USIKKERHET_AXIS_COLS):
+            if col in usikkerhet:
+                out[col] = usikkerhet[col].array
+        out["metode_usikkerhet"] = METODE_USIKKERHET_NISJEDATA
+    elif usikkerhet is not None:
         out["nkm_usikkerhetsklasse"] = np.asarray(usikkerhet)
         out["metode_usikkerhet"] = METODE_USIKKERHET_NISJEDATA
 
