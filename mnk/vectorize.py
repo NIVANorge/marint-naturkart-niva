@@ -531,35 +531,56 @@ def intersect_layers(
     return result.reset_index(drop=True)
 
 
-def remove_overlaps(gdf: gpd.GeoDataFrame, rank, workers: int = 4) -> gpd.GeoDataFrame:
+def remove_overlaps(
+    gdf: gpd.GeoDataFrame, rank, workers: int = 4, chunk: int = 50_000
+) -> gpd.GeoDataFrame:
     """Make *gdf* non-overlapping: where polygons overlap, the lower ``rank`` keeps the area.
 
     Each polygon loses the parts covered by polygons with a lower rank (ties go to
     the earlier row), so the union is unchanged and every point ends up in exactly
-    one polygon. Polygons that are covered completely disappear. Attributes are kept;
-    the result is single-part polygons on a fresh RangeIndex.
+    one polygon. Polygons that only share an edge do not count as overlapping.
+
+    Memory stays bounded: pairs are found ``chunk`` polygons at a time and only the
+    polygons that really overlap get a new geometry. When nothing overlaps, *gdf*
+    itself is returned. Otherwise the untouched rows come first, followed by the
+    trimmed ones as single-part polygons (fully covered ones disappear), on a fresh
+    RangeIndex.
     """
     rank = np.asarray(rank)
-    geoms = gdf.geometry.values.copy()
-    a, b = STRtree(geoms).query(geoms, predicate="intersects")
-    wins = (rank[b] < rank[a]) | ((rank[b] == rank[a]) & (b < a))
-    losers: dict[int, list[int]] = defaultdict(list)
-    for i, j in zip(a[wins].tolist(), b[wins].tolist()):
-        losers[i].append(j)
-
     src = gdf.geometry.values
-    work = [(i, src[i], src[js]) for i, js in losers.items()]
+    tree = STRtree(src)
+    trimmed: dict[int, object] = {}
+    for start in range(0, len(src), chunk):
+        idx = np.arange(start, min(start + chunk, len(src)))
+        a, b = tree.query(src[idx], predicate="intersects")
+        a = idx[a]
+        wins = (rank[b] < rank[a]) | ((rank[b] == rank[a]) & (b < a))
+        a, b = a[wins], b[wins]
+        inner = ~shapely.touches(src[a], src[b])
+        a, b = a[inner], b[inner]
+        if not len(a):
+            continue
+        order = np.argsort(a, kind="stable")
+        a, b = a[order], b[order]
+        losers, first = np.unique(a, return_index=True)
+        winners = np.split(b, first[1:])
 
-    def _diff(item):
-        i, geom, winners = item
-        return i, _to_polygons(geom.difference(shapely.union_all(winners)))
+        def _diff(k):
+            i = losers[k]
+            return i, _to_polygons(src[i].difference(shapely.union_all(src[winners[k]])))
 
-    for i, geom in _map(_diff, work, workers):
-        geoms[i] = geom
+        for i, geom in _map(_diff, range(len(losers)), workers):
+            trimmed[int(i)] = geom
 
-    out = gdf.copy()
-    out[gdf.geometry.name] = geoms
-    return _single_polygons(out).reset_index(drop=True)
+    if not trimmed:
+        return gdf
+    rows = np.fromiter(trimmed, dtype=np.int64, count=len(trimmed))
+    keep = np.ones(len(gdf), dtype=bool)
+    keep[rows] = False
+    fixed = gdf.iloc[rows].copy()
+    fixed[gdf.geometry.name] = [trimmed[i] for i in rows.tolist()]
+    out = pd.concat([gdf[keep], _single_polygons(fixed)], ignore_index=True)
+    return gpd.GeoDataFrame(out, geometry=gdf.geometry.name, crs=gdf.crs)
 
 
 def _single_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:

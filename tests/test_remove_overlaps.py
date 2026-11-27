@@ -1,5 +1,6 @@
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import pytest
 import shapely
 from shapely.geometry import box
@@ -52,8 +53,34 @@ def test_fully_covered_polygon_disappears_and_split_ones_are_exploded():
     assert set(remove_overlaps(g2, rank=[1, 2])["v"]) == {"big"}
 
 
-def test_non_overlapping_input_is_unchanged():
+def test_non_overlapping_input_is_returned_as_is():
     g = _gdf([box(0, 0, 1, 1), box(1, 0, 2, 1), box(5, 5, 6, 6)], v=[1, 2, 3])
+    assert remove_overlaps(g, rank=g.area) is g
+
+
+def test_touching_tiles_are_not_overlaps():
+    # A tiled layer (like a vectorised classification) shares edges everywhere.
+    tiles = [box(x, y, x + 1, y + 1) for x in range(30) for y in range(30)]
+    g = _gdf(tiles, v=np.arange(len(tiles)))
+    assert remove_overlaps(g, rank=g.area, chunk=97) is g
+
+
+def test_chunk_size_does_not_change_the_result():
+    rng = np.random.default_rng(3)
+    x, y = rng.uniform(0, 50, 300), rng.uniform(0, 50, 300)
+    w, h = rng.uniform(1, 6, 300), rng.uniform(1, 6, 300)
+    g = _gdf([box(a, b, a + c, b + d) for a, b, c, d in zip(x, y, w, h)], v=np.arange(300))
+    whole = remove_overlaps(g, rank=g.area)
+    chunked = remove_overlaps(g, rank=g.area, chunk=7)
+    key = lambda o: o.assign(a=o.area.round(9)).sort_values(["v", "a"]).reset_index(drop=True)
+    pd.testing.assert_frame_equal(key(whole).drop(columns="geometry"), key(chunked).drop(columns="geometry"))
+    assert whole.area.sum() == pytest.approx(shapely.union_all(g.geometry.values).area)
+    assert _max_pairwise_overlap(whole) == pytest.approx(0, abs=1e-9)
+
+
+def test_untouched_rows_keep_their_geometry_objects():
+    g = _gdf([box(0, 0, 10, 10), box(4, 4, 6, 6), box(20, 20, 21, 21)], v=["big", "small", "far"])
     out = remove_overlaps(g, rank=g.area)
-    assert out["v"].tolist() == [1, 2, 3]
-    assert out.geometry.geom_equals(g.geometry).all()
+    assert out["v"].tolist()[:2] == ["small", "far"]  # untouched first, trimmed after
+    assert out.geometry.iloc[1] is g.geometry.iloc[2]
+    assert out.index.equals(pd.RangeIndex(len(out)))
