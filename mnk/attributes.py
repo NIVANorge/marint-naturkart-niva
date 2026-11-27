@@ -72,7 +72,7 @@ NIN_FLATE_COLUMNS: list[str] = [
     R.COL_SUBSTRAT,
     R.COL_TOERFALL,
     "metode_klassifisering",
-    "nkm_usikkerhet",
+    "nkm_usikkerhetsklasse",
     "metode_usikkerhet",
     "datakilde",
 ]
@@ -220,7 +220,7 @@ def add_nkm_attributes(
     """Add derived Naturkart attributes to *gdf* and return the nin_flate_NK schema.
 
     When ``usikkerhet`` is given (the per-axis decision-margin estimate from
-    :func:`mnk.utils.nisje_usikkerhet`) it sets ``nkm_usikkerhet`` with
+    :func:`mnk.utils.nisje_usikkerhet`) it sets ``nkm_usikkerhetsklasse`` with
     ``metode_usikkerhet`` = :data:`METODE_USIKKERHET_NISJEDATA`. Working columns
     (:data:`WORKING_COLS`) are dropped and the result is reduced to
     :data:`NIN_FLATE_COLUMNS` (those present, in canonical order).
@@ -239,7 +239,7 @@ def add_nkm_attributes(
     out["nkm_prosess"] = out[kode_col].map(NKM_PROSESS)
 
     if usikkerhet is not None:
-        out["nkm_usikkerhet"] = np.asarray(usikkerhet)
+        out["nkm_usikkerhetsklasse"] = np.asarray(usikkerhet)
         out["metode_usikkerhet"] = METODE_USIKKERHET_NISJEDATA
 
     if substrat_kilde_col in out.columns:
