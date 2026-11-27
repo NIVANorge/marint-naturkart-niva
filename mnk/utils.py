@@ -1,6 +1,7 @@
 """Shared utilities for the mnk package."""
 
 import os
+from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
@@ -91,6 +92,19 @@ def grid_subdivide(
 
 def to_filename(ressurstittel, romligutstrekning, ressursdato, referansesystem):
     return f"{ressurstittel}_{romligutstrekning}_{ressursdato}_{referansesystem}"
+
+
+def repo_root(start: Path | str | None = None) -> Path:
+    """The repository root: the nearest directory at or above *start* (cwd) with a pyproject.toml.
+
+    Notebooks run from ``notebooks/`` in Jupyter but from the repository root under
+    papermill; local data files live in the root either way.
+    """
+    here = Path(start or Path.cwd()).resolve()
+    for d in (here, *here.parents):
+        if (d / "pyproject.toml").is_file():
+            return d
+    raise FileNotFoundError(f"No pyproject.toml at or above {here}")
 
 
 def to_tablename(fname: str) -> str:
