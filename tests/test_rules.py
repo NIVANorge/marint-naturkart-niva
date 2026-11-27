@@ -85,3 +85,23 @@ def test_classify_seabee_overrides_lys(seabee):
 
 def test_classify_seabee_deep_keeps_model_lys():
     assert classify_seabee("DEEP", "afotisk", "salt", "løst", "utenfor")[0] == "NA-MA06"
+
+
+def test_classify_seabee_angio_without_salinity_is_undetermined():
+    assert classify_seabee("ANGIO", "eufotisk", None, "løst", "utenfor") == (None, None)
+
+
+# 03a raster coding (see the LUT comments in 03a_nisjemodell_raster.ipynb).
+NIN_INT_CODES = {
+    1: "NA-MC04", 2: "NA-MA04", 3: "NA-MC01", 4: "NA-MA01",
+    5: "NA-MC04", 6: "NA-MC04", 7: "NA-MA05", 8: "NA-MA06",
+    9: "NA-MC02", 10: "NA-MC02", 11: "NA-MA02", 12: "NA-MA03",
+}
+
+
+def test_nin_int_axes_are_unique_and_match_raster_codes():
+    from mnk.rules import NIN_INT_AXES
+
+    assert sorted(NIN_INT_AXES) == list(range(1, 13))
+    assert len(set(NIN_INT_AXES.values())) == 12
+    assert {k: classify_nisje(*v)[0] for k, v in NIN_INT_AXES.items()} == NIN_INT_CODES

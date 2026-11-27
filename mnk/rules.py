@@ -92,6 +92,27 @@ def classify_nisje(lys: str, salinitet: str, substrat: str, toerfall: str) -> Ni
         ) from exc
 
 
+NIN_INT_AXES: dict[int, tuple[str, str, str, str]] = {
+    1: ("eufotisk", "brakk", "løst", "innenfor"),
+    2: ("eufotisk", "salt", "løst", "innenfor"),
+    3: ("eufotisk", "brakk", "fast", "innenfor"),
+    4: ("eufotisk", "salt", "fast", "innenfor"),
+    5: ("eufotisk", "brakk", "løst", "utenfor"),
+    6: ("afotisk", "brakk", "løst", "utenfor"),
+    7: ("eufotisk", "salt", "løst", "utenfor"),
+    8: ("afotisk", "salt", "løst", "utenfor"),
+    9: ("eufotisk", "brakk", "fast", "utenfor"),
+    10: ("afotisk", "brakk", "fast", "utenfor"),
+    11: ("eufotisk", "salt", "fast", "utenfor"),
+    12: ("afotisk", "salt", "fast", "utenfor"),
+}
+"""Niche raster class (1-12, written by 03a) -> ``(lys, salinitet, substrat, toerfall)``.
+
+Each axis combination has its own integer, so the vector step can decode the raster
+class back into axes (:func:`mnk.attributes.axes_from_nin_int`).
+"""
+
+
 SEABEE_SUBSTRAT_OVERRIDE: dict[str, str] = {
     "ALGAE": "fast",
     "ROCK": "fast",
@@ -158,7 +179,7 @@ def classify_seabee(
     unknown falls back to the pure nisjemodell.
     """
     if seabee == "ANGIO":
-        return _t(SEABEE_ANGIO[salinitet])
+        return _t(SEABEE_ANGIO[salinitet]) if isinstance(salinitet, str) else (None, None)
     if seabee in SEABEE_NONMARINE:
         return None
     lys = SEABEE_LYS_OVERRIDE.get(seabee, lys)

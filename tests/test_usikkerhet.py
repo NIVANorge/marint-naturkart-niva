@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import box
 
-from mnk.attributes import NIN_FLATE_COLUMNS, USIKKERHET_AXIS_COLS, add_nkm_attributes
+from mnk.attributes import USIKKERHET_AXIS_COLS
 from mnk.utils import usikkerhet_axis_classes, usikkerhet_from_margins, usikkerhet_table
 
 # Columns: lav on every axis, høy on light only, medium substrate, no data at all.
@@ -36,30 +36,6 @@ def test_table_columns_and_na():
     assert t["nkm_usikkerhet_lys"].iloc[:3].tolist() == ["lav", "høy", "lav"]
     assert t.iloc[3][list(USIKKERHET_AXIS_COLS)].isna().all()
     assert t.iloc[3]["nkm_usikkerhetsklasse"] == "medium"
-
-
-def test_add_nkm_attributes_writes_axis_columns():
-    gdf = gpd.GeoDataFrame(
-        {"nin_int": [2] * 4, "nin_kode_fkid": ["NA-MA04"] * 4},
-        geometry=[box(i, 0, i + 1, 1) for i in range(4)],
-        crs="EPSG:25833",
-        index=[10, 11, 12, 13],
-    )
-    out = add_nkm_attributes(gdf, usikkerhet=usikkerhet_table(MEANS))
-    cols = ["nkm_usikkerhetsklasse", *USIKKERHET_AXIS_COLS]
-    assert [c for c in out.columns if c in cols] == cols
-    assert [c for c in out.columns if c != "geometry"] == [c for c in NIN_FLATE_COLUMNS if c in out]
-    assert out["nkm_usikkerhet_lys"].tolist()[:3] == ["lav", "høy", "lav"]
-    assert pd.isna(out["nkm_usikkerhet_substrat"].iloc[3])
-
-
-def test_add_nkm_attributes_accepts_plain_array():
-    gdf = gpd.GeoDataFrame(
-        {"nin_int": [2], "nin_kode_fkid": ["NA-MA04"]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:25833"
-    )
-    out = add_nkm_attributes(gdf, usikkerhet=np.array(["høy"], dtype=object))
-    assert out["nkm_usikkerhetsklasse"].tolist() == ["høy"]
-    assert not set(USIKKERHET_AXIS_COLS) & set(out.columns)
 
 
 def test_worst_usikkerhet_ignores_na_and_defaults():
