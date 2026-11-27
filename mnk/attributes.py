@@ -200,6 +200,28 @@ def metode_from_datakilde(datakilde) -> np.ndarray:
     return pd.Series(np.asarray(datakilde), dtype="string").map(one).to_numpy()
 
 
+def map_unique(df: pd.DataFrame, fn, columns: list[str] | None = None):
+    """Apply ``fn(*row)`` once per unique row of *df* and scatter the results back.
+
+    Rule lookups have few distinct inputs but run over millions of polygons, so
+    this calls ``fn`` once per combination. NA values reach ``fn`` as ``None``.
+    Without ``columns`` an object array aligned with *df* is returned; with
+    ``columns`` each ``fn`` result is a tuple and a DataFrame on *df*'s index is.
+    """
+    codes = df.groupby(list(df.columns), dropna=False, sort=False).ngroup().to_numpy()
+    first = np.unique(codes, return_index=True)[1]
+    uniq = df.iloc[first].astype(object)
+    uniq = uniq.where(uniq.notna(), None)
+    res = [fn(*row) for row in uniq.itertuples(index=False, name=None)]
+    if columns is not None:
+        table = pd.DataFrame(res, columns=columns) if res else pd.DataFrame(columns=columns)
+        return table.iloc[codes].set_axis(df.index)
+    out = np.empty(len(res), dtype=object)
+    for i, r in enumerate(res):
+        out[i] = r
+    return out[codes]
+
+
 def worst_usikkerhet(axes: pd.DataFrame, default: str = "medium") -> pd.Series:
     """Row-wise worst (most uncertain) of ``lav``/``medium``/``høy`` label columns.
 
