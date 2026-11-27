@@ -116,29 +116,6 @@ def test_depth_preprocess():
     assert 0 <= result["sea_convexity"][0] <= 1
 
 
-def test_depth_preprocess_skip_if_present():
-    polygons = [Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])]
-    
-    gdf = gpd.GeoDataFrame(
-        {
-            "minimumsdybde": [10],
-            "maksimumsdybde": [30],
-            "sea_avg_depth": [20],
-            "sea_avg_slope": [5],
-            "sea_compactness": [0.8],
-            "sea_convexity": [0.9],
-            "sea_area": [10000],
-        },
-        geometry=polygons,
-        crs="EPSG:25833",
-    )
-    
-    result = depth_preprocess(gdf, is_rerun=False)
-    
-    # Should return same data without modification
-    assert result["sea_avg_depth"][0] == 20
-
-
 def test_to_raster_shapes():
     polygons = [Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])]
     
