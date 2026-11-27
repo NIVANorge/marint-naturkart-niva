@@ -112,6 +112,21 @@ Each axis combination has its own integer, so the vector step can decode the ras
 class back into axes (:func:`mnk.attributes.axes_from_nin_int`).
 """
 
+_NIN_INT_FROM_AXES = {axes: k for k, axes in NIN_INT_AXES.items()}
+NIN_INT_LUT3: tuple[int, ...] = tuple(
+    _NIN_INT_FROM_AXES[(
+        ("afotisk", "eufotisk")[key >> 2 & 1],
+        ("salt", "brakk")[key >> 1 & 1],
+        ("løst", "fast")[key & 1],
+        "utenfor",
+    )]
+    for key in range(8)
+)
+"""03a raster lookup: ``key = lys*4 + salinitet*2 + substrat`` -> :data:`NIN_INT_AXES` class.
+
+Bits are 1 = eufotisk / brakk / fast; the raster step has no tørrfall (``utenfor``).
+"""
+
 
 SEABEE_SUBSTRAT_OVERRIDE: dict[str, str] = {
     "ALGAE": "fast",

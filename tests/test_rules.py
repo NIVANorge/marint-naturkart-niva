@@ -105,3 +105,9 @@ def test_nin_int_axes_are_unique_and_match_raster_codes():
     assert sorted(NIN_INT_AXES) == list(range(1, 13))
     assert len(set(NIN_INT_AXES.values())) == 12
     assert {k: classify_nisje(*v)[0] for k, v in NIN_INT_AXES.items()} == NIN_INT_CODES
+
+
+def test_nin_int_lut3_matches_the_raster_03a_wrote():
+    from mnk.rules import NIN_INT_LUT3
+
+    assert NIN_INT_LUT3 == (8, 12, 6, 10, 7, 11, 5, 9)
