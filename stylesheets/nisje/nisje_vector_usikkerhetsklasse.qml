@@ -1,7 +1,7 @@
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
 <!--
   QGIS style for the niche-model (nisjemodell) vector dataset from
-  notebooks/03b_nisjemodell_vektor.ipynb, categorized on the nkm_usikkerhetsklasse field.
+  notebooks/03b_nisjemodell_vector.ipynb, categorized on the nkm_usikkerhetsklasse field.
   høy = uncertain (red), lav = certain (green); nin_kode_fkid styling lives
   in nisje_vector.qml and is left unchanged.
 -->

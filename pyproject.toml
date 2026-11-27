@@ -74,12 +74,12 @@ validate = "papermill notebooks/01_substrat/05_validate.ipynb notebooks/01_subst
 install-kernel = "python scripts/install_kernel.py"
 dump-features = "papermill notebooks/dump_features.ipynb notebooks/dump_features.ipynb"
 nisjemodell-raster = "papermill notebooks/03a_nisjemodell_raster.ipynb notebooks/03a_nisjemodell_raster.ipynb"
-nisjemodell-vektor = "papermill notebooks/03b_nisjemodell_vektor.ipynb notebooks/03b_nisjemodell_vektor.ipynb"
-nisjemodell = { depends-on = ["nisjemodell-raster", "nisjemodell-vektor"] }
+nisjemodell-vector = "papermill notebooks/03b_nisjemodell_vector.ipynb notebooks/03b_nisjemodell_vector.ipynb"
+nisjemodell = { depends-on = ["nisjemodell-raster", "nisjemodell-vector"] }
 combine-remote-sensing = "papermill notebooks/04_combine_remote_sensing_habitat.ipynb notebooks/04_combine_remote_sensing_habitat.ipynb"
 combine-direct = "papermill notebooks/05_combine_direct.ipynb notebooks/05_combine_direct.ipynb"
 combine = { depends-on = ["combine-remote-sensing", "combine-direct"] }
-rerun-from-vektor = { depends-on = ["nisjemodell-vektor", "combine-remote-sensing", "combine-direct"] }
+rerun-from-vector = { depends-on = ["nisjemodell-vector", "combine-remote-sensing", "combine-direct"] }
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
 prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
 pmtiles = "bash scripts/pyramids.sh"
