@@ -38,3 +38,5 @@ figures/klassifiseringsregler_2_nisjemodell.svg
 figures/klassifiseringsregler_3_samlet.png
 figures/klassifiseringsregler_3_samlet.svg
 uv.lock
+.goosehints
+docs/writing_context.md
