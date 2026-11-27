@@ -130,26 +130,6 @@ def update_datamodel(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return out
 
 
-def habitat_usikkerhet(prob: np.ndarray, conf: np.ndarray) -> np.ndarray:
-    """SeaBee-habitat usikkerhet (``lav``/``medium``/``høy``) from the model P-values.
-
-    ``prob`` is the per-polygon class-probability matrix (the ``p_*`` columns, %);
-    ``conf`` the median own-class probability (the ``p50`` column, %). Uncertainty
-    is ``lav`` only when the model is both confident and unambiguous
-    (``conf >= 60`` and top1-top2 margin ``>= 30``), ``høy`` when confidence is low
-    or two classes nearly tie (``conf < 40`` or margin ``< 10``), else ``medium``.
-    This is the :data:`METODE_USIKKERHET_HABITAT` method.
-    """
-    prob = np.asarray(prob, dtype=float)
-    conf = np.asarray(conf, dtype=float)
-    top2 = np.sort(prob, axis=1)[:, -2:]
-    margin = top2[:, 1] - top2[:, 0]
-    out = np.full(len(conf), "medium", dtype=object)
-    out[(conf >= 60) & (margin >= 30)] = "lav"
-    out[(conf < 40) | (margin < 10)] = "høy"
-    return out
-
-
 def build_datakilde(
     substrat_kilde,
     toerfall,
