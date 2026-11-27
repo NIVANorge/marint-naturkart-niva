@@ -531,6 +531,37 @@ def intersect_layers(
     return result.reset_index(drop=True)
 
 
+def remove_overlaps(gdf: gpd.GeoDataFrame, rank, workers: int = 4) -> gpd.GeoDataFrame:
+    """Make *gdf* non-overlapping: where polygons overlap, the lower ``rank`` keeps the area.
+
+    Each polygon loses the parts covered by polygons with a lower rank (ties go to
+    the earlier row), so the union is unchanged and every point ends up in exactly
+    one polygon. Polygons that are covered completely disappear. Attributes are kept;
+    the result is single-part polygons on a fresh RangeIndex.
+    """
+    rank = np.asarray(rank)
+    geoms = gdf.geometry.values.copy()
+    a, b = STRtree(geoms).query(geoms, predicate="intersects")
+    wins = (rank[b] < rank[a]) | ((rank[b] == rank[a]) & (b < a))
+    losers: dict[int, list[int]] = defaultdict(list)
+    for i, j in zip(a[wins].tolist(), b[wins].tolist()):
+        losers[i].append(j)
+
+    src = gdf.geometry.values
+    work = [(i, src[i], src[js]) for i, js in losers.items()]
+
+    def _diff(item):
+        i, geom, winners = item
+        return i, _to_polygons(geom.difference(shapely.union_all(winners)))
+
+    for i, geom in _map(_diff, work, workers):
+        geoms[i] = geom
+
+    out = gdf.copy()
+    out[gdf.geometry.name] = geoms
+    return _single_polygons(out).reset_index(drop=True)
+
+
 def _single_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     gdf = gdf.explode(index_parts=False)
     return gdf[(gdf.geom_type == "Polygon") & ~gdf.geometry.is_empty]
@@ -557,13 +588,16 @@ def overlay_update(
     result; columns ``update`` adds are kept. ``update`` may drop rows, which
     leaves that area out of the result.
 
-    ``dissolve`` merges the updated inside pieces that share all attributes; this
-    also removes the duplicate pieces that overlapping mask polygons produce.
+    Overlapping mask polygons would give overlapping pieces, so the mask is made
+    non-overlapping first with :func:`remove_overlaps`: the smaller polygon wins.
+
+    ``dissolve`` merges the updated inside pieces that share all attributes.
 
     Returns *base*'s rows with the affected ones replaced by single-part pieces,
     on a fresh RangeIndex.
     """
     geom = base.geometry.name
+    mask = remove_overlaps(mask, rank=mask.area, workers=workers)
     ok = np.ones(len(base), dtype=bool) if where is None else np.asarray(where, dtype=bool)
     cand = np.flatnonzero(ok)
     hit_in, _ = STRtree(mask.geometry.values).query(base.geometry.values[cand], predicate="intersects")

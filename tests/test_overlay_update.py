@@ -79,16 +79,27 @@ def test_update_can_drop_rows():
     assert out.area.sum() == pytest.approx(_base().area.sum() - 1.0)
 
 
-def test_overlapping_mask_duplicates_without_dissolve_and_merges_with():
+def test_overlapping_mask_gives_no_duplicate_area():
     mask = _mask(box(1, -1, 3, 2), box(1.5, -1, 3, 2))
-    dup = overlay_update(_base(), mask, _set_v(9))
-    assert dup.loc[dup["v"] == 9].area.sum() == pytest.approx(1.5)
+    out = overlay_update(_base(), mask, _set_v(9))
+    assert out.loc[out["v"] == 9].area.sum() == pytest.approx(1.0)
+    assert out.area.sum() == pytest.approx(_base().area.sum())
 
     merged = overlay_update(_base(), mask, _set_v(9), dissolve=True)
-    nine = merged[merged["v"] == 9]
-    assert len(nine) == 1
-    assert nine.area.sum() == pytest.approx(1.0)
-    assert merged.area.sum() == pytest.approx(_base().area.sum())
+    assert len(merged[merged["v"] == 9]) == 1
+
+
+def test_overlapping_mask_with_conflicting_attributes_smaller_wins():
+    # big (k=3) covers all of A; small (k=4) covers [1.5, 2] of it.
+    mask = _mask(box(-1, -1, 3, 2), box(1.5, -1, 2.5, 2), k=[3, 4])
+    out = overlay_update(_base(), mask, lambda p: p.assign(v=p["k"]))
+    areas = out.groupby("v").apply(lambda g: g.area.sum()).to_dict()
+    assert areas == pytest.approx({2: 1.0, 3: 1.5, 4: 0.5})
+
+
+def test_empty_mask_returns_base_rows():
+    out = overlay_update(_base(), _mask(), _set_v(9))
+    assert out["v"].tolist() == [1, 2]
 
 
 def test_dissolve_keeps_different_attributes_apart():
