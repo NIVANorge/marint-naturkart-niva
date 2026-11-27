@@ -531,6 +531,63 @@ def intersect_layers(
     return result.reset_index(drop=True)
 
 
+def _single_polygons(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    gdf = gdf.explode(index_parts=False)
+    return gdf[(gdf.geom_type == "Polygon") & ~gdf.geometry.is_empty]
+
+
+def overlay_update(
+    base: gpd.GeoDataFrame,
+    mask: gpd.GeoDataFrame,
+    update,
+    where=None,
+    dissolve: bool = False,
+    workers: int = 4,
+    progress: bool = False,
+) -> gpd.GeoDataFrame:
+    """Cut *base* by *mask* and apply ``update`` to the pieces inside the mask.
+
+    Polygons of *base* that intersect *mask* (and pass the boolean ``where``) are
+    split into the part inside the mask, which goes through
+    ``update(pieces) -> pieces``, and the part outside, which keeps its
+    attributes. All other polygons pass through without geometry work.
+
+    Mask attributes are visible to ``update`` (a name already in *base* gets a
+    ``_2`` suffix, see :func:`intersect_layers`) but are not carried into the
+    result; columns ``update`` adds are kept. ``update`` may drop rows, which
+    leaves that area out of the result.
+
+    ``dissolve`` merges the updated inside pieces that share all attributes; this
+    also removes the duplicate pieces that overlapping mask polygons produce.
+
+    Returns *base*'s rows with the affected ones replaced by single-part pieces,
+    on a fresh RangeIndex.
+    """
+    geom = base.geometry.name
+    ok = np.ones(len(base), dtype=bool) if where is None else np.asarray(where, dtype=bool)
+    cand = np.flatnonzero(ok)
+    hit_in, _ = STRtree(mask.geometry.values).query(base.geometry.values[cand], predicate="intersects")
+    hit = np.zeros(len(base), dtype=bool)
+    hit[cand[np.unique(hit_in)]] = True
+
+    affected = base[hit].reset_index(drop=True)
+    inside = intersect_layers(affected, mask, workers=workers, progress=progress)
+    outside = subtract_layer(affected, mask, workers=workers, progress=progress)
+
+    seen = set(inside.columns)
+    inside = update(inside)
+    keep = list(base.columns) + [c for c in inside.columns if c not in seen]
+    inside = inside[keep]
+    if dissolve and len(inside):
+        by = [c for c in keep if c != geom]
+        inside = inside.dissolve(by=by, as_index=False, dropna=False) if by else inside.dissolve()
+        inside = inside[keep]
+
+    changed = _single_polygons(pd.concat([outside, inside], ignore_index=True))
+    out = pd.concat([base[~hit], changed], ignore_index=True)
+    return gpd.GeoDataFrame(out, geometry=geom, crs=base.crs)
+
+
 def merge_slivers(
     gdf: gpd.GeoDataFrame,
     min_area: float,
