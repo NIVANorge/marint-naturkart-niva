@@ -111,3 +111,26 @@ def test_nin_int_lut3_matches_the_raster_03a_wrote():
     from mnk.rules import NIN_INT_LUT3
 
     assert NIN_INT_LUT3 == (8, 12, 6, 10, 7, 11, 5, 9)
+
+
+def test_raster_class_round_trip_for_every_class_and_band():
+    import itertools
+
+    import numpy as np
+
+    from mnk.rules import NIN_INT_AXES, decode_raster_class, encode_raster_class
+
+    combos = np.array(list(itertools.product(NIN_INT_AXES, range(4))))
+    code = encode_raster_class(combos[:, 0], combos[:, 1])
+    assert code.dtype == np.uint8
+    assert len(set(code.tolist())) == len(combos)
+    assert code.min() >= 1 and code.max() <= 48  # 255 stays free for nodata
+    nin, sal = decode_raster_class(code)
+    assert np.array_equal(np.column_stack([nin, sal]), combos)
+
+
+def test_unbanded_raster_classes_decode_with_band_zero():
+    from mnk.rules import decode_raster_class
+
+    nin, sal = decode_raster_class([5, 12])
+    assert nin.tolist() == [5, 12] and sal.tolist() == [0, 0]

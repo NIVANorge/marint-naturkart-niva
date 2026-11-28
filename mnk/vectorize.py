@@ -9,8 +9,6 @@ Common utilities
 GRASS pipeline
 --------------
 Pipeline: r.in.gdal → r.to.vect -s → v.generalize → v.out.ogr
-Any gap inside the marine vanntyper outline not covered by the raster polygons is
-appended as a row with ``class_int = -1`` (unclassified).
 """
 
 from __future__ import annotations
@@ -240,6 +238,25 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # Common raster-to-vector utilities
 # ---------------------------------------------------------------------------
+
+
+def sieve_raster(src_path, dst_path, size: int, connectivity: int = 4) -> Path:
+    """Write a copy of a single-band raster with regions smaller than *size* pixels removed.
+
+    Each small connected region takes the value of its largest neighbour (GDAL sieve
+    filter). GDAL streams the raster, so memory grows with the number of regions,
+    not the raster size. Nodata pixels are left alone and never absorb a region.
+    """
+    gdal.UseExceptions()
+    src = gdal.Open(str(src_path))
+    dst = gdal.GetDriverByName("GTiff").CreateCopy(
+        str(dst_path), src, options=["COMPRESS=DEFLATE", "TILED=YES"]
+    )
+    band = src.GetRasterBand(1)
+    gdal.SieveFilter(band, band.GetMaskBand(), dst.GetRasterBand(1), size, connectivity)
+    dst.FlushCache()
+    src = dst = None
+    return Path(dst_path)
 
 
 def pad_nodata(arr: np.ndarray, nodata: int | float = 255, iterations: int = 1) -> np.ndarray:

@@ -233,6 +233,12 @@ def map_unique(df: pd.DataFrame, fn, columns: list[str] | None = None):
     return out[codes]
 
 
+def usikkerhet_from_band(band) -> pd.Series:
+    """Band (1 = lav, 2 = medium, 3 = høy, 0 = none) -> usikkerhet label (NA for 0)."""
+    labels = {i: k for i, k in enumerate(USIKKERHET_KLASSER, start=1)}
+    return pd.Series(np.asarray(band)).map(labels).astype("string")
+
+
 def worst_usikkerhet(axes: pd.DataFrame, default: str = "medium") -> pd.Series:
     """Row-wise worst (most uncertain) of ``lav``/``medium``/``høy`` label columns.
 
@@ -263,6 +269,21 @@ def axes_from_nin_int(nin_int: pd.Series) -> pd.DataFrame:
         lut = {k: codes[axes[i]] for k, axes in R.NIN_INT_AXES.items()}
         out[col] = nin_int.map(lut)
     return pd.DataFrame(out, index=nin_int.index)
+
+
+def from_raster_class(raster_class: pd.Series) -> pd.DataFrame:
+    """Decode the 03a raster value into the axis columns and the salinity usikkerhet.
+
+    The value packs the :data:`mnk.rules.NIN_INT_AXES` class and the salinity band
+    (:func:`mnk.rules.encode_raster_class`). Raises ``ValueError`` for values without
+    the band, i.e. a 03a output written before the band existed.
+    """
+    nin, sal = R.decode_raster_class(raster_class.to_numpy())
+    if (sal == 0).any():
+        raise ValueError("03a output without the salinity usikkerhet band; rerun 03a")
+    out = axes_from_nin_int(pd.Series(nin, index=raster_class.index))
+    out["nkm_usikkerhet_salinitet"] = usikkerhet_from_band(sal).array
+    return out
 
 
 def axis_tokens(gdf: pd.DataFrame) -> pd.DataFrame:

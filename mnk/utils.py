@@ -28,6 +28,11 @@ USIKKERHET_LYS = (0.30, 0.10)   # |z_eu - depth| / z_eu (relative: Kd490 error s
 USIKKERHET_SAL = (6.0, 2.0)     # |salinity - 18 PSU| (wide: HI mean-surface model error)
 SALINITY_BRAKKVANN = 18.0
 EUPHOTIC_LN = float(np.log(100.0))  # 1 % light (euphotic) depth = ln(100) / Kd490
+# A polygon takes the worst substrate/light band that covers at least this share of its area.
+USIKKERHET_ANDEL = 0.25
+# Salinity band patches smaller than this (50 m pixels; 16 = 4 ha) are merged into their
+# neighbour in 03a, so the band does not break the map into single-pixel polygons.
+USIKKERHET_SIEVE_PX = 16
 
 
 def grid_subdivide(
@@ -339,30 +344,152 @@ def usikkerhet_table(
     return pd.DataFrame(data).astype("string")
 
 
-def nisje_usikkerhet(
+# Per-pixel bands (03a for salinity, polygon_usikkerhet for substrate and light).
+# Margins are signed relative to the pixel's class: positive = the driver agrees
+# with the class, negative = it contradicts it, NaN = no data.
+
+
+def salinity_margin(sal, brakk):
+    """Signed distance (PSU) from the 18 PSU brakkvann threshold, towards the class."""
+    d = np.asarray(sal, dtype="float32") - SALINITY_BRAKKVANN
+    return np.where(brakk, -d, d)
+
+
+def light_margin(kd, depth, eufotisk):
+    """Signed relative distance from the euphotic depth ``ln(100) / Kd490``, towards the class."""
+    kd = np.asarray(kd, dtype="float32")
+    with np.errstate(divide="ignore", invalid="ignore"):
+        z_eu = EUPHOTIC_LN / np.where(kd > 0, kd, np.nan)
+        d = (z_eu - np.asarray(depth, dtype="float32")) / z_eu
+    return np.where(eufotisk, d, -d)
+
+
+def substrate_margin(soft, hard, fast):
+    """Signed probability difference ``P_hard - P_soft``, towards the class."""
+    d = np.asarray(hard, dtype="float32") - np.asarray(soft, dtype="float32")
+    return np.where(fast, d, -d)
+
+
+def margin_band(margin, lav: float, hoy: float) -> np.ndarray:
+    """Band per pixel: 1 = lav (``margin >= lav``), 2 = medium, 3 = høy.
+
+    Høy covers a small margin, the wrong side of the threshold (negative margin)
+    and missing data (NaN), where the class rests on a guess.
+    """
+    m = np.asarray(margin)
+    with np.errstate(invalid="ignore"):
+        return np.where(m >= lav, 1, np.where(m >= hoy, 2, 3)).astype(np.uint8)
+
+
+def band_from_shares(counts: np.ndarray, share: float = USIKKERHET_ANDEL) -> np.ndarray:
+    """Polygon band from its pixel counts per band (``counts[k]`` = pixels in band ``k + 1``).
+
+    The worst band covering at least ``share`` of the polygon wins: høy if the høy
+    share reaches it, else medium if medium + høy does, else lav. Polygons without
+    pixels get 0.
+    """
+    counts = np.asarray(counts, dtype=np.float64)
+    total = counts.sum(axis=0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        hoy = counts[2] / total
+        med_or_hoy = (counts[1] + counts[2]) / total
+    band = np.where(hoy >= share, 3, np.where(med_or_hoy >= share, 2, 1))
+    return np.where(total > 0, band, 0).astype(np.uint8)
+
+
+def polygon_usikkerhet(
     gdf: gpd.GeoDataFrame,
     *,
+    subprob_path: str,
     kd_path: str,
     depth_path: str,
-    salinity_path: str,
-    subprob_path: str,
-    is_obs: np.ndarray | None = None,
+    fast,
+    eufotisk,
+    is_obs=None,
+    share: float = USIKKERHET_ANDEL,
     block: int = 1024,
     progress: bool = True,
-) -> pd.DataFrame:
-    """Per-polygon usikkerhet (``lav``/``medium``/``høy``) from axis decision margins.
+) -> dict[str, np.ndarray]:
+    """Substrate and light usikkerhet band per polygon (1 = lav, 2 = medium, 3 = høy).
 
-    Thin wrapper over :func:`nisje_axis_margins` + :func:`usikkerhet_table` using
-    the module ``USIKKERHET_*`` thresholds; returns the combined class plus one
-    column per axis, row-aligned with ``gdf``.
+    One streamed pass over the 50 m grid of ``subprob_path`` (band 1 = soft,
+    band 3 = hard); ``depth_path`` must share that grid and ``kd_path`` is warped
+    onto it (bilinear). Each pixel gets a band per axis from its signed margin
+    towards the polygon's class (``fast`` / ``eufotisk``, one bool per polygon):
+    :func:`substrate_margin` and :func:`light_margin`. The polygon band follows
+    :func:`band_from_shares`. Polygons too small to cover a pixel centre take the
+    band of the pixel at their representative point; polygons outside the grid get 0.
+    ``is_obs`` (NGU-observed substrate) forces substrate to lav. Polygons must not
+    overlap (each pixel belongs to one). Returns ``{"substrat": ..., "lys": ...}``.
     """
-    means = nisje_axis_margins(
-        gdf,
-        kd_path=kd_path,
-        depth_path=depth_path,
-        salinity_path=salinity_path,
-        subprob_path=subprob_path,
-        block=block,
-        progress=progress,
-    )
-    return usikkerhet_table(means, is_obs=is_obs)
+    n = len(gdf)
+    fast = np.asarray(fast, dtype=bool)
+    euf = np.asarray(eufotisk, dtype=bool)
+    axes = ("substrat", "lys")
+    counts = {a: np.zeros((3, n), dtype=np.int64) for a in axes}
+    fallback = {a: np.zeros(n, dtype=np.uint8) for a in axes}
+    with rasterio.open(subprob_path) as src, rasterio.open(depth_path) as dsrc, \
+            rasterio.open(kd_path) as kd_src, \
+            WarpedVRT(kd_src, resampling=Resampling.bilinear, crs=src.crs, transform=src.transform,
+                      width=src.width, height=src.height) as kd_v:
+        if (dsrc.transform, dsrc.width, dsrc.height) != (src.transform, src.width, src.height):
+            raise ValueError("depth_path must share the grid of subprob_path")
+        geoms = gdf.geometry.to_crs(src.crs).values
+        tree = shapely.STRtree(geoms)
+        reps = gpd.GeoSeries(geoms, crs=src.crs).representative_point()
+        rep_r, rep_c = (np.asarray(a) for a in rowcol(src.transform, reps.x.values, reps.y.values))
+        tiles = [(r, c) for r in range(0, src.height, block) for c in range(0, src.width, block)]
+        for t, (row0, col0) in enumerate(tiles, start=1):
+            if progress:
+                print(f"\r  polygon_usikkerhet: tile {t:,}/{len(tiles):,}", end="", flush=True)
+            win = Window(col0, row0, min(block, src.width - col0), min(block, src.height - row0))
+            idx = tree.query(shapely.box(*window_bounds(win, src.transform)))
+            if not len(idx):
+                continue
+            ids = rasterize(
+                zip(geoms[idx], idx + 1),
+                out_shape=(win.height, win.width),
+                transform=src.window_transform(win),
+                fill=0,
+                dtype="uint32",
+            )
+            soft = src.read(1, window=win).astype("float32")
+            hard = src.read(3, window=win).astype("float32")
+            if src.nodata is not None:
+                bad = soft == src.nodata
+                soft[bad] = np.nan
+                hard[bad] = np.nan
+            depth = dsrc.read(1, window=win).astype("float32")
+            if dsrc.nodata is not None:
+                depth[depth == dsrc.nodata] = np.nan
+            depth = np.abs(depth)
+            kd = kd_v.read(1, window=win).astype("float32")
+
+            def bands(r, c, poly):
+                return {
+                    "substrat": margin_band(substrate_margin(soft[r, c], hard[r, c], fast[poly]), *USIKKERHET_SUB),
+                    "lys": margin_band(light_margin(kd[r, c], depth[r, c], euf[poly]), *USIKKERHET_LYS),
+                }
+
+            r, c = np.nonzero(ids)
+            poly = ids[r, c].astype(np.int64) - 1
+            for a, band in bands(r, c, poly).items():
+                for k in range(3):
+                    counts[a][k] += np.bincount(poly[band == k + 1], minlength=n)
+
+            in_tile = np.flatnonzero(
+                (rep_r >= row0) & (rep_r < row0 + win.height) & (rep_c >= col0) & (rep_c < col0 + win.width)
+            )
+            if len(in_tile):
+                for a, band in bands(rep_r[in_tile] - row0, rep_c[in_tile] - col0, in_tile).items():
+                    fallback[a][in_tile] = band
+        if progress:
+            print()
+
+    out = {}
+    for a in axes:
+        band = band_from_shares(counts[a], share)
+        out[a] = np.where(band == 0, fallback[a], band).astype(np.uint8)
+    if is_obs is not None:
+        out["substrat"] = np.where(np.asarray(is_obs, dtype=bool), 1, out["substrat"]).astype(np.uint8)
+    return out

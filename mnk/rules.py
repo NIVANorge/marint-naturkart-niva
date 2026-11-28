@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+import numpy as np
+
 NiNType = tuple[str, str]
 """A ``(nin_kode_fkid, NiN_name)`` pair."""
 
@@ -126,6 +128,23 @@ NIN_INT_LUT3: tuple[int, ...] = tuple(
 
 Bits are 1 = eufotisk / brakk / fast; the raster step has no tørrfall (``utenfor``).
 """
+
+
+def encode_raster_class(nin_int, sal_band):
+    """Pack a :data:`NIN_INT_AXES` class and the salinity usikkerhet band into one raster value.
+
+    The band is 1 = lav, 2 = medium, 3 = høy, 0 = no band. The value is
+    ``nin_int + 12 * sal_band`` (1-48), so a raster written without the band keeps
+    its plain 1-12 classes. Works on scalars and arrays.
+    """
+    code = np.asarray(nin_int, dtype=np.int64) + 12 * np.asarray(sal_band, dtype=np.int64)
+    return code.astype(np.uint8)
+
+
+def decode_raster_class(code):
+    """Inverse of :func:`encode_raster_class`: ``(nin_int, sal_band)``."""
+    band, base = np.divmod(np.asarray(code, dtype=np.int64) - 1, 12)
+    return base + 1, band
 
 
 SEABEE_SUBSTRAT_OVERRIDE: dict[str, str] = {
