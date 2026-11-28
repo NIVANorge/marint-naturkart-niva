@@ -80,6 +80,7 @@ combine-remote-sensing = "papermill notebooks/04_combine_remote_sensing_habitat.
 combine-direct = "papermill notebooks/05_combine_direct.ipynb notebooks/05_combine_direct.ipynb"
 combine = { depends-on = ["combine-remote-sensing", "combine-direct"] }
 rerun-from-vector = { depends-on = ["nisjemodell-vector", "combine-remote-sensing", "combine-direct"] }
+rerun-from-raster = { depends-on = ["nisjemodell-raster", "nisjemodell-vector", "combine-remote-sensing", "combine-direct"] }
 prepare-depth-points = "python -c 'import mnk.sources; mnk.sources.prepare_depth_point_data()'"
 prepare-sea-depth = "python -c 'import mnk.sources; mnk.sources.prepare_sea_basis_depth_data()'"
 pmtiles = "bash scripts/pyramids.sh"

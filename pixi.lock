@@ -10047,7 +10047,7 @@ packages:
 - pypi: ./
   name: mnk
   version: 0.1.0
-  sha256: 26bdc7d799b72de6bc56424b6fb5fdf1b7f471954ca88db66a57f94d9aa1d883
+  sha256: 63ff381adc1a392fa8b1ec21fef76a195962143ac4a5b2fe4bae217266db078f
   requires_dist:
   - geoalchemy2>=0.18.1
   - geopandas>=1.1.2
